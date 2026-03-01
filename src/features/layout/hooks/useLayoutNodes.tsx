@@ -195,6 +195,7 @@ type LayoutNodesOptions = {
   onOpenMemory: () => void;
   onOpenProjectMemory: () => void;
   onOpenSpecHub: () => void;
+  onOpenWorkspaceHome: () => void;
   updaterState: UpdateState;
   onUpdate: () => void;
   onDismissUpdate: () => void;
@@ -237,6 +238,8 @@ type LayoutNodesOptions = {
   launchScriptsState?: WorkspaceLaunchScriptsState;
   mainHeaderActionsNode?: ReactNode;
   centerMode: "chat" | "diff" | "editor" | "memory";
+  editorSplitLayout: "vertical" | "horizontal";
+  onToggleEditorSplitLayout: () => void;
   editorFilePath: string | null;
   openEditorTabs: string[];
   onActivateEditorTab: (path: string) => void;
@@ -643,6 +646,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onOpenMemory={options.onOpenMemory}
       onOpenProjectMemory={options.onOpenProjectMemory}
       onOpenSpecHub={options.onOpenSpecHub}
+      onOpenWorkspaceHome={options.onOpenWorkspaceHome}
       showTerminalButton={options.showTerminalButton}
       isTerminalOpen={options.terminalOpen}
       onToggleTerminal={options.onToggleTerminal}
@@ -1100,6 +1104,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         workspaceId={options.activeWorkspace.id}
         workspacePath={options.activeWorkspace.path}
         filePath={options.editorFilePath}
+        gitStatusFiles={options.gitStatus.files}
         openTabs={options.openEditorTabs}
         activeTabPath={options.editorFilePath}
         onActivateTab={options.onActivateEditorTab}
@@ -1113,6 +1118,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         openAppIconById={options.openAppIconById}
         selectedOpenAppId={options.selectedOpenAppId}
         onSelectOpenAppId={options.onSelectOpenAppId}
+        editorSplitLayout={options.editorSplitLayout}
+        onToggleEditorSplitLayout={options.onToggleEditorSplitLayout}
         onClose={options.onExitEditor}
         onInsertText={options.onInsertComposerText}
       />

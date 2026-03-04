@@ -1515,9 +1515,13 @@ const en = {
     open: "open",
     // Panel tabs
     diffMode: "Diff",
+    diffModeDescription: "Inspect file changes",
     logMode: "Git",
+    logModeDescription: "Browse commits and history",
     issuesMode: "Issues",
+    issuesModeDescription: "Track repository issues",
     prsMode: "PRs",
+    prsModeDescription: "Review pull requests",
     // Worktree operations
     applyWorktreeChanges: "Apply changes to parent workspace",
     applyWorktreeChangesAction: "Apply worktree changes",

@@ -1485,9 +1485,13 @@ const zh = {
     open: "未关闭",
     // 面板标签
     diffMode: "差异Diff",
+    diffModeDescription: "查看文件变更差异",
     logMode: "Git",
+    logModeDescription: "浏览提交与历史记录",
     issuesMode: "议题",
+    issuesModeDescription: "跟踪仓库议题",
     prsMode: "拉取请求",
+    prsModeDescription: "查看拉取请求状态",
     // 工作树操作
     applyWorktreeChanges: "将更改应用到父工作区",
     applyWorktreeChangesAction: "应用工作树更改",

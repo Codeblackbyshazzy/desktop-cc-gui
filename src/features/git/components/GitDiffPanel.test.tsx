@@ -19,6 +19,15 @@ vi.mock("react-i18next", () => ({
         "git.listFlat": "Flat",
         "git.listTree": "Tree",
         "git.listView": "List view",
+        "git.panelView": "Git panel view",
+        "git.diffMode": "Diff",
+        "git.diffModeDescription": "Inspect file changes",
+        "git.logMode": "Git",
+        "git.logModeDescription": "Browse commits and history",
+        "git.issuesMode": "Issues",
+        "git.issuesModeDescription": "Track repository issues",
+        "git.prsMode": "PRs",
+        "git.prsModeDescription": "Review pull requests",
         "git.fileActions": "File actions",
         "git.stageFile": "Stage file",
         "git.stageChanges": "Stage changes",
@@ -208,6 +217,23 @@ describe("GitDiffPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Hub" }));
     expect(onOpenGitHistoryPanel).toHaveBeenCalledTimes(1);
+  });
+
+  it("switches git panel mode from custom dropdown menu", () => {
+    const onModeChange = vi.fn();
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        onModeChange={onModeChange}
+        unstagedFiles={[
+          { path: "file.txt", status: "M", additions: 1, deletions: 0 },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Git panel view" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /Issues/i }));
+    expect(onModeChange).toHaveBeenCalledWith("issues");
   });
 
   it("keeps flat mode stage action behavior", () => {

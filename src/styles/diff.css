@@ -98,66 +98,156 @@
   justify-content: flex-end;
 }
 
-.git-panel-select-input {
-  border: 0;
-  border-bottom: 1px solid var(--border-subtle);
-  background: transparent;
-  background-color: transparent;
-  color: var(--text-faint);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 4px 24px 5px 20px;
-  border-radius: 0;
-  cursor: pointer;
-  min-height: 28px;
-  -webkit-appearance: none;
-  appearance: none;
-  -moz-appearance: none;
-  box-shadow: none;
-  outline: none;
-  background-image: linear-gradient(45deg, transparent 50%, var(--text-dim) 50%),
-    linear-gradient(135deg, var(--text-dim) 50%, transparent 50%);
-  background-position: calc(100% - 12px) 55%, calc(100% - 7px) 55%;
-  background-size: 5px 5px, 5px 5px;
-  background-repeat: no-repeat;
-}
-
-.git-panel-select-input::-ms-expand {
-  display: none;
-}
-
-.git-panel-select-input:hover {
-  color: var(--text-emphasis);
-  border-bottom-color: color-mix(in srgb, var(--text-accent, #7a9dcc) 60%, var(--border-subtle));
-}
-
-.git-panel-select-input:focus,
-.git-panel-select-input:active,
-.git-panel-select-input:focus-visible {
-  outline: none;
-  border: 0;
-  color: var(--text-emphasis);
-  border-bottom-color: var(--text-accent, #7a9dcc);
-  box-shadow: none;
-  background-image: none;
-}
-
-.git-panel-select-icon {
+.git-panel-select-trigger {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  pointer-events: none;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 13px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-emphasis);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: none;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+  outline: none;
 }
 
-.git-panel-select-icon svg {
+.git-panel-select-trigger:hover {
+  border-color: color-mix(in srgb, var(--border-default, #d1d5db) 80%, transparent);
+  background: color-mix(in srgb, var(--surface-control-hover, #eceff3) 96%, transparent);
+}
+
+.git-panel-select-trigger.is-open {
+  border-color: color-mix(in srgb, var(--border-default, #d1d5db) 86%, transparent);
+  background: color-mix(in srgb, var(--surface-control-hover, #eceff3) 98%, transparent);
+}
+
+.git-panel-select-trigger:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--text-accent, #7a9dcc) 64%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-accent, #7a9dcc) 24%, transparent);
+}
+
+.git-panel-select-label {
+  white-space: nowrap;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.git-panel-select-caret {
   width: 12px;
   height: 12px;
+  color: var(--text-muted);
+  transition: transform 160ms ease;
+}
+
+.git-panel-select-trigger.is-open .git-panel-select-caret {
+  transform: rotate(180deg);
+}
+
+.git-panel-select-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: auto;
+  right: 0;
+  z-index: 32;
+  min-width: max(100%, 246px);
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-default, #d1d5db) 72%, transparent);
+  background: color-mix(in srgb, var(--surface-card, #ffffff) 98%, var(--surface-panel, #f8fafc) 2%);
+  box-shadow:
+    0 12px 30px rgba(15, 23, 42, 0.14),
+    0 2px 6px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.git-panel-select-menu-title {
+  padding: 0 2px 2px;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.git-panel-select-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  border-radius: 10px;
+  padding: 9px 10px;
+  color: var(--text-emphasis);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.git-panel-select-option:hover {
+  background: color-mix(in srgb, var(--surface-control-hover, #eef2f7) 94%, transparent);
+}
+
+.git-panel-select-option.is-active {
+  background: color-mix(in srgb, var(--surface-control-hover, #eef2f7) 58%, transparent);
+  color: var(--text-emphasis);
+}
+
+.git-panel-select-option:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--surface-control-hover, #eef2f7) 80%, transparent);
+}
+
+.git-panel-select-option-check {
+  width: 14px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  color: color-mix(in srgb, var(--text-emphasis) 88%, transparent);
+  opacity: 0;
+  margin-top: 1px;
+}
+
+.git-panel-select-option-check.is-active {
+  opacity: 1;
+}
+
+.git-panel-select-option-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.git-panel-select-option-label {
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.git-panel-select-option-description {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.25;
+  color: var(--text-muted);
+  font-weight: 500;
 }
 
 .diff-branch {

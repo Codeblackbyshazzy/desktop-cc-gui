@@ -202,7 +202,7 @@ impl ClaudeSession {
             cmd.arg(model);
         }
 
-        // Session continuation
+        // Session continuation / explicit session identity
         if params.continue_session {
             if let Some(ref session_id) = params.session_id {
                 cmd.arg("--resume");
@@ -210,6 +210,12 @@ impl ClaudeSession {
             } else {
                 cmd.arg("--continue");
             }
+        } else if let Some(ref session_id) = params.session_id {
+            // Force a fresh, stable identity for "new conversation" runs.
+            // This prevents concurrent Claude turns from collapsing into the
+            // same persisted session due CLI implicit reuse behavior.
+            cmd.arg("--session-id");
+            cmd.arg(session_id);
         }
 
         if let Some(spec_root) = params
@@ -1823,6 +1829,58 @@ mod tests {
         assert!(args.windows(2).any(|window| {
             window[0] == "--add-dir" && window[1] == params.custom_spec_root.clone().unwrap()
         }));
+    }
+
+    #[test]
+    fn build_command_uses_session_id_for_new_conversation_without_continue() {
+        let session = ClaudeSession::new(
+            "test-workspace".to_string(),
+            PathBuf::from("/tmp/test"),
+            None,
+        );
+        let mut params = SendMessageParams::default();
+        params.text = "hello".to_string();
+        params.continue_session = false;
+        params.session_id = Some("11111111-1111-4111-8111-111111111111".to_string());
+
+        let command = session.build_command(&params, false);
+        let args: Vec<String> = command
+            .as_std()
+            .get_args()
+            .map(|arg| arg.to_string_lossy().to_string())
+            .collect();
+
+        assert!(args.windows(2).any(|window| {
+            window[0] == "--session-id"
+                && window[1] == "11111111-1111-4111-8111-111111111111"
+        }));
+        assert!(!args.iter().any(|arg| arg == "--continue" || arg == "--resume"));
+    }
+
+    #[test]
+    fn build_command_uses_resume_when_continue_session_is_enabled() {
+        let session = ClaudeSession::new(
+            "test-workspace".to_string(),
+            PathBuf::from("/tmp/test"),
+            None,
+        );
+        let mut params = SendMessageParams::default();
+        params.text = "hello".to_string();
+        params.continue_session = true;
+        params.session_id = Some("22222222-2222-4222-8222-222222222222".to_string());
+
+        let command = session.build_command(&params, false);
+        let args: Vec<String> = command
+            .as_std()
+            .get_args()
+            .map(|arg| arg.to_string_lossy().to_string())
+            .collect();
+
+        assert!(args.windows(2).any(|window| {
+            window[0] == "--resume"
+                && window[1] == "22222222-2222-4222-8222-222222222222"
+        }));
+        assert!(!args.iter().any(|arg| arg == "--session-id"));
     }
 
     #[tokio::test]

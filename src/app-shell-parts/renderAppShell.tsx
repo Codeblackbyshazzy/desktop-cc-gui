@@ -101,7 +101,7 @@ export function renderAppShell(ctx: any) {
     showPresetStep, showPreviousReleaseNotes, showSpecHub, showWorkspaceHome, sidebarCollapsed, sidebarNode, sidebarToggleProps, sidebarWidth,
     skills, slashToken, snapshot, soloModeEnabled, startExport, startFast, startFork, startHeight,
     startImport, startLsp, startMcp, startMode, startResume, startReview, startShare, startSpecRoot,
-    startStatus, startThreadForWorkspace, startUpdate, startY, status, stored, syncError, syncLoading,
+    startStatus, startThreadForWorkspace, startUpdate, startY, stored, syncError, syncLoading,
     t, tabBarNode, tabletNavNode, tabletTab, target, targetThread, targetWorkspaceIds, task,
     taskProcessingMap, taskWs, terminalDockNode, terminalOpen, terminalPanelHeight, terminalState, terminalTabs, textareaHeight,
     threadAccessMode, threadChanged, threadId, threadItemsByThread, threadListCursorByWorkspace, threadListLoadingByWorkspace, threadListPagingByWorkspace, threadMode,

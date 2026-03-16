@@ -11,6 +11,7 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { ensureWorkspacePathDir } from "../services/tauri";
 import { resolveKanbanThreadCreationStrategy } from "../features/kanban/utils/contextMode";
 import { deriveKanbanTaskTitle } from "../features/kanban/utils/taskTitle";
+import type { KanbanTask } from "../features/kanban/types";
 import { useSoloMode } from "../features/layout/hooks/useSoloMode";
 import { useLiveEditPreview } from "../features/live-edit-preview/hooks/useLiveEditPreview";
 import { useArchiveShortcut } from "../features/app/hooks/useArchiveShortcut";
@@ -18,6 +19,9 @@ import { useWorkspaceCycling } from "../features/app/hooks/useWorkspaceCycling";
 import { useAppMenuEvents } from "../features/app/hooks/useAppMenuEvents";
 import { useMenuAcceleratorController } from "../features/app/hooks/useMenuAcceleratorController";
 import { useMenuLocalization } from "../features/app/hooks/useMenuLocalization";
+import type { WorkspaceHomeDeleteResult } from "../features/workspaces/components/WorkspaceHome";
+import type { EngineType, MessageSendOptions, WorkspaceInfo } from "../types";
+import type { KanbanContextMode } from "../features/kanban/utils/contextMode";
 
 export function useAppShellSections(ctx: any) {
   const {
@@ -29,6 +33,7 @@ export function useAppShellSections(ctx: any) {
     activeEngine,
     selectedAgent,
     activeWorkspaceId,
+    activeThreadId,
     normalizePath,
     addWorkspaceFromPath,
     alertError,
@@ -65,16 +70,20 @@ export function useAppShellSections(ctx: any) {
     kanbanTasks,
     appMode,
     setSelectedKanbanTaskId,
+    selectedKanbanTaskId,
     workspacesByPath,
     kanbanViewState,
     setActiveWorkspaceId,
+    setWorkspaceHomeWorkspaceId,
     updateWorkspaceSettings,
     activeTab,
+    tabletTab,
     settingsOpen,
     showWorkspaceHome,
     filePanelMode,
     sidebarCollapsed,
     rightPanelCollapsed,
+    isWorkspaceDropActive,
     setFilePanelMode,
     collapseSidebar,
     expandSidebar,
@@ -89,6 +98,7 @@ export function useAppShellSections(ctx: any) {
     handleCloseAllFileTabs,
     handleExitEditor,
     selectedDiffPath,
+    isTablet,
     isPhone,
     closeSettings,
     selectHome,
@@ -109,6 +119,7 @@ export function useAppShellSections(ctx: any) {
     handleDebugClick,
     handleToggleTerminalPanel,
     handleToggleSearchPalette,
+    composerSendLabel,
     refreshAccountRateLimits,
     showHome,
     showKanban,

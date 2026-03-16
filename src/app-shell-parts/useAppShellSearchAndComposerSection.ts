@@ -1,8 +1,10 @@
 // @ts-nocheck
+import { useCallback, useEffect } from "react";
 import { useGlobalSearchShortcut } from "../features/app/hooks/useGlobalSearchShortcut";
 import { useInterruptShortcut } from "../features/app/hooks/useInterruptShortcut";
 import { usePullRequestComposer } from "../features/git/hooks/usePullRequestComposer";
 import { recordSearchResultOpen } from "../features/search/ranking/recencyStore";
+import type { SearchContentFilter, SearchResult } from "../features/search/types";
 import { resolveSearchScopeOnOpen } from "../features/search/utils/scope";
 import { toggleSearchContentFilters } from "../features/search/utils/contentFilters";
 
@@ -84,7 +86,7 @@ export function useAppShellSearchAndComposerSection(ctx: any) {
     showDebugButton, showGitHistory, showHome, showKanban, showNextReleaseNotes, showPresetStep, showPreviousReleaseNotes, showWorkspaceHome,
     sidebarCollapsed, sidebarWidth, skills, snapshot, startExport, startFast, startFork, startHeight,
     startImport, startLsp, startMcp, startMode, startResume, startReview, startShare, startSpecRoot,
-    startStatus, startThreadForWorkspace, startUpdate, startY, status, stored, syncError, syncLoading,
+    startStatus, startThreadForWorkspace, startUpdate, startY, stored, syncError, syncLoading,
     t, tabletTab, target, targetThread, targetWorkspaceIds, terminalOpen, terminalPanelHeight, terminalState,
     terminalTabs, textareaHeight, threadAccessMode, threadChanged, threadId, threadItemsByThread, threadListCursorByWorkspace, threadListLoadingByWorkspace,
     threadListPagingByWorkspace, threadMode, threadParentById, threadStatusById, threads, threadsByWorkspace, timelinePlan, title,
@@ -304,6 +306,7 @@ export function useAppShellSearchAndComposerSection(ctx: any) {
     handleSearchPaletteMoveSelection,
     handleToggleSearchContentFilter,
     handleSelectSearchResult,
+    handleSelectPullRequest,
     resetPullRequestSelection,
     isPullRequestComposer,
     composerSendLabel,

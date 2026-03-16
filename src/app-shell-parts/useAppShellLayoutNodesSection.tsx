@@ -1,6 +1,8 @@
 // @ts-nocheck
+import { ask } from "@tauri-apps/plugin-dialog";
 import { useLayoutNodes } from "../features/layout/hooks/useLayoutNodes";
 import { MainHeaderActions } from "../features/app/components/MainHeaderActions";
+import { OPENCODE_VARIANT_OPTIONS } from "./utils";
 
 export function useAppShellLayoutNodesSection(ctx: any) {
   const {
@@ -88,7 +90,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     showSpecHub, showWorkspaceHome, sidebarCollapsed, sidebarToggleProps, sidebarWidth, skills, slashToken, snapshot,
     soloModeEnabled, startExport, startFast, startFork, startHeight, startImport, startLsp, startMcp,
     startMode, startResume, startReview, startShare, startSpecRoot, startStatus, startThreadForWorkspace, startUpdate,
-    startY, status, stored, syncError, syncLoading, t, tabletTab, target,
+    startY, stored, syncError, syncLoading, t, tabletTab, target,
     targetThread, targetWorkspaceIds, task, taskProcessingMap, taskWs, terminalOpen, terminalPanelHeight, terminalState,
     terminalTabs, textareaHeight, threadAccessMode, threadChanged, threadId, threadItemsByThread, threadListCursorByWorkspace, threadListLoadingByWorkspace,
     threadListPagingByWorkspace, threadMode, threadParentById, threadStatusById, threads, threadsByWorkspace, timelinePlan, title,
@@ -398,9 +400,8 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     onOpenFile: handleOpenWorkspaceFile,
     onExitEditor: handleExitWorkspaceEditor,
     onExitDiff: () => {
-      markLiveEditPreviewManualNavigation();
       setCenterMode("chat");
-      setSelectedDiffPath(null);
+      handleSelectDiffForPanel(null);
     },
     activeTab,
     onSelectTab: setActiveTab,

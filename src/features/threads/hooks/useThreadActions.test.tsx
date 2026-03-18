@@ -91,6 +91,7 @@ describe("useThreadActions", () => {
       current: {} as Record<string, Record<string, number>>,
     };
     const applyCollabThreadLinksFromThread = vi.fn();
+    const updateThreadParent = vi.fn();
 
     const args: Parameters<typeof useThreadActions>[0] = {
       dispatch,
@@ -104,6 +105,7 @@ describe("useThreadActions", () => {
       loadedThreadsRef,
       replaceOnResumeRef,
       applyCollabThreadLinksFromThread,
+      updateThreadParent,
       onThreadTitleMappingsLoaded: vi.fn(),
       onRenameThreadTitleMapping: vi.fn(),
       ...overrides,
@@ -117,6 +119,7 @@ describe("useThreadActions", () => {
       replaceOnResumeRef: args.replaceOnResumeRef,
       threadActivityRef: args.threadActivityRef,
       applyCollabThreadLinksFromThread: args.applyCollabThreadLinksFromThread,
+      updateThreadParent: args.updateThreadParent,
       ...utils,
     };
   }
@@ -589,6 +592,125 @@ describe("useThreadActions", () => {
     });
   });
 
+  it("restores collab parent links from unified codex history snapshots", async () => {
+    vi.mocked(resumeThread).mockResolvedValue({
+      result: {
+        thread: {
+          turns: [
+            {
+              id: "turn-1",
+              items: [],
+            },
+          ],
+        },
+      },
+    });
+    vi.mocked(loadCodexSession).mockResolvedValue(undefined);
+    vi.mocked(buildItemsFromThread).mockReturnValue([
+      {
+        id: "collab-1",
+        kind: "tool",
+        toolType: "collabToolCall",
+        title: "Collab: spawn_agent",
+        detail: "From thread-unified-links → agent-7",
+        status: "completed",
+        output: "run in parallel",
+      },
+    ]);
+    vi.mocked(mergeThreadItems).mockImplementation(
+      (baseItems) => baseItems as ConversationItem[],
+    );
+
+    const { result, updateThreadParent } = renderActions({
+      useUnifiedHistoryLoader: true,
+    });
+
+    await act(async () => {
+      await result.current.resumeThreadForWorkspace("ws-1", "thread-unified-links");
+    });
+
+    expect(updateThreadParent).toHaveBeenCalledWith("thread-unified-links", ["agent-7"]);
+  });
+
+  it("hydrates related child threads from unified collab history snapshot", async () => {
+    vi.mocked(resumeThread).mockImplementation(
+      async (_workspaceId: string, threadId: string) => {
+        if (threadId === "thread-root") {
+          return {
+            result: {
+              thread: {
+                turns: [{ id: "turn-root", items: [{ type: "collabToolCall" }] }],
+              },
+            },
+          };
+        }
+        if (threadId === "child-1") {
+          return {
+            result: {
+              thread: {
+                turns: [{ id: "turn-child", items: [{ type: "commandExecution" }] }],
+              },
+            },
+          };
+        }
+        return null;
+      },
+    );
+    vi.mocked(loadCodexSession).mockResolvedValue(undefined);
+    vi.mocked(buildItemsFromThread).mockImplementation((thread) => {
+      const firstItemType = (thread as { turns?: Array<{ items?: Array<{ type?: string }> }> })
+        .turns?.[0]?.items?.[0]?.type;
+      if (firstItemType === "collabToolCall") {
+        return [
+          {
+            id: "collab-root-1",
+            kind: "tool",
+            toolType: "collabToolCall",
+            title: "Collab: spawn_agent",
+            detail: "From thread-root → child-1",
+            status: "completed",
+            output: "",
+          },
+        ] satisfies ConversationItem[];
+      }
+      if (firstItemType === "commandExecution") {
+        return [
+          {
+            id: "cmd-child-1",
+            kind: "tool",
+            toolType: "commandExecution",
+            title: "Command",
+            detail: "pwd",
+            status: "completed",
+            output: "/repo",
+          },
+        ] satisfies ConversationItem[];
+      }
+      return [];
+    });
+
+    const { result, dispatch } = renderActions({
+      useUnifiedHistoryLoader: true,
+    });
+
+    await act(async () => {
+      await result.current.resumeThreadForWorkspace("ws-1", "thread-root");
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "child-1",
+      engine: "codex",
+    });
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "setThreadItems",
+        threadId: "child-1",
+      }),
+    );
+  });
+
   it("lists threads for a workspace and persists activity", async () => {
     vi.mocked(listThreads).mockResolvedValue({
       result: {
@@ -688,6 +810,94 @@ describe("useThreadActions", () => {
           id: "thread-private-1",
           name: "Private prefix path",
           updatedAt: 6100,
+          engineSource: "codex",
+        },
+      ],
+    });
+  });
+
+  it("matches Windows workspace path when thread cwd uses extended-length prefix", async () => {
+    const windowsWorkspace: WorkspaceInfo = {
+      ...workspace,
+      id: "ws-win",
+      path: "C:\\Users\\Chen\\project",
+    };
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-win-1",
+            cwd: "\\\\?\\C:\\Users\\Chen\\project\\src",
+            preview: "Windows extended path",
+            updated_at: 6200,
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+    vi.mocked(getThreadTimestamp).mockImplementation((thread) => {
+      const value = (thread as Record<string, unknown>).updated_at as number;
+      return value ?? 0;
+    });
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(windowsWorkspace);
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreads",
+      workspaceId: "ws-win",
+      threads: [
+        {
+          id: "thread-win-1",
+          name: "Windows extended path",
+          updatedAt: 6200,
+          engineSource: "codex",
+        },
+      ],
+    });
+  });
+
+  it("matches Windows UNC workspace path when thread cwd uses \\?\\UNC prefix", async () => {
+    const uncWorkspace: WorkspaceInfo = {
+      ...workspace,
+      id: "ws-unc",
+      path: "\\\\SERVER\\Share\\project",
+    };
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-unc-1",
+            cwd: "\\\\?\\UNC\\server\\share\\project\\src",
+            preview: "UNC extended path",
+            updated_at: 6300,
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+    vi.mocked(getThreadTimestamp).mockImplementation((thread) => {
+      const value = (thread as Record<string, unknown>).updated_at as number;
+      return value ?? 0;
+    });
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(uncWorkspace);
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreads",
+      workspaceId: "ws-unc",
+      threads: [
+        {
+          id: "thread-unc-1",
+          name: "UNC extended path",
+          updatedAt: 6300,
           engineSource: "codex",
         },
       ],

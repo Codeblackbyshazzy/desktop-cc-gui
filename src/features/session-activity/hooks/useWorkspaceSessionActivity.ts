@@ -183,39 +183,44 @@ export function useWorkspaceSessionActivity({
         return nextTimestamp;
       };
 
-      const timeline = normalizedTimeline
-        .map((event) => {
-          const previousOccurredAt = previousOccurredAtByEventId[event.eventId];
-          if (typeof previousOccurredAt === "number" && previousOccurredAt > 0) {
-            nextOccurredAtByEventId[event.eventId] = previousOccurredAt;
-            if (previousOccurredAt === event.occurredAt) {
-              return event;
-            }
-            return {
-              ...event,
-              occurredAt: previousOccurredAt,
-            };
+      const resolvedTimeline = [...normalizedTimeline];
+      for (let timelineIndex = normalizedTimeline.length - 1; timelineIndex >= 0; timelineIndex -= 1) {
+        const event = normalizedTimeline[timelineIndex];
+        const previousOccurredAt = previousOccurredAtByEventId[event.eventId];
+        if (typeof previousOccurredAt === "number" && previousOccurredAt > 0) {
+          nextOccurredAtByEventId[event.eventId] = previousOccurredAt;
+          if (previousOccurredAt === event.occurredAt) {
+            resolvedTimeline[timelineIndex] = event;
+            continue;
           }
-
-          const fromAdapter =
-            typeof event.occurredAt === "number" && Number.isFinite(event.occurredAt)
-              ? event.occurredAt
-              : null;
-          const fallbackTimestamp = nowBase - eventSequence * 1000;
-          if (!fromAdapter) {
-            eventSequence += 1;
-          }
-          const occurredAt = reserveDistinctSecond(fromAdapter ?? fallbackTimestamp);
-          nextOccurredAtByEventId[event.eventId] = occurredAt;
-          if (occurredAt === event.occurredAt) {
-            return event;
-          }
-          return {
+          resolvedTimeline[timelineIndex] = {
             ...event,
-            occurredAt,
+            occurredAt: previousOccurredAt,
           };
-        })
-        .sort((left, right) => right.occurredAt - left.occurredAt);
+          continue;
+        }
+
+        const fromAdapter =
+          typeof event.occurredAt === "number" && Number.isFinite(event.occurredAt)
+            ? event.occurredAt
+            : null;
+        const fallbackTimestamp = nowBase - eventSequence * 1000;
+        if (!fromAdapter) {
+          eventSequence += 1;
+        }
+        const occurredAt = reserveDistinctSecond(fromAdapter ?? fallbackTimestamp);
+        nextOccurredAtByEventId[event.eventId] = occurredAt;
+        if (occurredAt === event.occurredAt) {
+          resolvedTimeline[timelineIndex] = event;
+          continue;
+        }
+        resolvedTimeline[timelineIndex] = {
+          ...event,
+          occurredAt,
+        };
+      }
+
+      const timeline = resolvedTimeline.sort((left, right) => right.occurredAt - left.occurredAt);
 
       eventOccurredAtRef.current = nextOccurredAtByEventId;
       eventSequenceRef.current = eventSequence;

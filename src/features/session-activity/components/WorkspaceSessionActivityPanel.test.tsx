@@ -1468,10 +1468,44 @@ describe("WorkspaceSessionActivityPanel", () => {
 
     const sessionPills = view.container.querySelectorAll(".session-activity-session-pill");
     expect(sessionPills).toHaveLength(1);
-    expect(sessionPills[0]?.textContent).toContain("Child session");
+    expect(sessionPills[0]?.textContent).not.toContain("Child session");
     expect(sessionPills[0]?.textContent).toContain("activityPanel.fallbackLinking");
     fireEvent.click(sessionPills[0] as HTMLButtonElement);
     expect(onSelectThread).toHaveBeenCalledWith("workspace-1", "child-thread");
+  });
+
+  it("keeps child session pills visible when realtime summaries temporarily drop", () => {
+    const viewModel = createViewModel();
+    const { container, rerender } = render(
+      <WorkspaceSessionActivityPanel
+        workspaceId="workspace-1"
+        viewModel={viewModel}
+        onOpenDiffPath={vi.fn()}
+        onSelectThread={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelectorAll(".session-activity-session-pill")).toHaveLength(1);
+
+    const rootOnlyViewModel: WorkspaceSessionActivityViewModel = {
+      ...viewModel,
+      sessionSummaries: viewModel.sessionSummaries.filter((session) => session.sessionRole === "root"),
+    };
+
+    act(() => {
+      rerender(
+        <WorkspaceSessionActivityPanel
+          workspaceId="workspace-1"
+          viewModel={rootOnlyViewModel}
+          onOpenDiffPath={vi.fn()}
+          onSelectThread={vi.fn()}
+        />,
+      );
+    });
+
+    const sessionPills = container.querySelectorAll(".session-activity-session-pill");
+    expect(sessionPills).toHaveLength(1);
+    expect(sessionPills[0]?.textContent).not.toContain("Child session");
   });
 
   it("renders a time label for each activity item", () => {

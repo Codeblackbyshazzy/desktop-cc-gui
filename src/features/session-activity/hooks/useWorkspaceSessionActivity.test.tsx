@@ -2,6 +2,7 @@
 import { renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem, ThreadSummary } from "../../../types";
+import type { SessionActivityEvent } from "../types";
 import { useWorkspaceSessionActivity } from "./useWorkspaceSessionActivity";
 import * as workspaceSessionActivityAdapter from "../adapters/buildWorkspaceSessionActivity";
 
@@ -160,6 +161,76 @@ describe("useWorkspaceSessionActivity", () => {
     const eventIds = result.current.timeline.map((event) => event.eventId);
     expect(new Set(eventIds).size).toBe(eventIds.length);
     expect(eventIds.some((eventId) => eventId.includes("::"))).toBe(true);
+  });
+
+  it("keeps the first adapter event as newest when same-second collisions happen", () => {
+    const nowSpy = vi.spyOn(Date, "now");
+    nowSpy.mockReturnValue(20_000);
+
+    vi.spyOn(
+      workspaceSessionActivityAdapter,
+      "resolveWorkspaceSessionActivityContext",
+    ).mockReturnValue(null);
+
+    const createEvent = (
+      eventId: string,
+      turnIndex: number,
+      summary: string,
+    ): SessionActivityEvent => ({
+      eventId,
+      threadId: "root",
+      threadName: "Root",
+      turnId: `root:turn:${turnIndex}`,
+      turnIndex,
+      sessionRole: "root",
+      relationshipSource: "directParent",
+      kind: "command",
+      occurredAt: 10_000,
+      summary,
+      status: "completed",
+    });
+
+    vi.spyOn(
+      workspaceSessionActivityAdapter,
+      "buildWorkspaceSessionActivity",
+    ).mockReturnValue({
+      rootThreadId: "root",
+      rootThreadName: "Root",
+      relevantThreadIds: ["root"],
+      timeline: [
+        createEvent("turn-1-latest", 1, "latest"),
+        createEvent("turn-8-older", 8, "older-8"),
+        createEvent("turn-9-older", 9, "older-9"),
+      ],
+      sessionSummaries: [
+        {
+          threadId: "root",
+          threadName: "Root",
+          sessionRole: "root",
+          relationshipSource: "directParent",
+          eventCount: 3,
+          isProcessing: false,
+        },
+      ],
+      isProcessing: false,
+      emptyState: "completed",
+    });
+
+    const { result } = renderHook(() =>
+      useWorkspaceSessionActivity({
+        activeThreadId: "root",
+        threads: [{ id: "root", name: "Root", updatedAt: 10_000 }],
+        itemsByThread: { root: [] },
+        threadParentById: {},
+        threadStatusById: {},
+      }),
+    );
+
+    expect(result.current.timeline.map((event) => event.eventId)).toEqual([
+      "turn-1-latest",
+      "turn-8-older",
+      "turn-9-older",
+    ]);
   });
 
   it("rebuilds only the changed thread snapshot during realtime refresh", () => {

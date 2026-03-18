@@ -194,6 +194,105 @@ describe("history loaders", () => {
     );
   });
 
+  it("reconstructs codex collab tool calls from local function history", () => {
+    const items = parseCodexSessionHistory({
+      entries: [
+        {
+          type: "response_item",
+          payload: {
+            type: "function_call",
+            call_id: "spawn-1",
+            name: "spawn_agent",
+            arguments: JSON.stringify({
+              message: "统计技术文件数量",
+            }),
+          },
+        },
+        {
+          type: "response_item",
+          payload: {
+            type: "function_call_output",
+            call_id: "spawn-1",
+            output: JSON.stringify({
+              id: "agent-7",
+            }),
+          },
+        },
+        {
+          type: "response_item",
+          payload: {
+            type: "function_call",
+            call_id: "send-1",
+            name: "send_input",
+            arguments: JSON.stringify({
+              id: "agent-7",
+              message: "继续执行",
+            }),
+          },
+        },
+        {
+          type: "response_item",
+          payload: {
+            type: "function_call_output",
+            call_id: "send-1",
+            output: JSON.stringify({
+              ok: true,
+            }),
+          },
+        },
+        {
+          type: "response_item",
+          payload: {
+            type: "function_call",
+            call_id: "wait-1",
+            name: "wait",
+            arguments: JSON.stringify({
+              ids: ["agent-7", "agent-8"],
+            }),
+          },
+        },
+        {
+          type: "response_item",
+          payload: {
+            type: "function_call_output",
+            call_id: "wait-1",
+            output: JSON.stringify({
+              statuses: [{ id: "agent-7", status: "completed" }],
+            }),
+          },
+        },
+      ],
+    });
+
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "spawn-1",
+          kind: "tool",
+          toolType: "collabToolCall",
+          title: "Collab: spawn_agent",
+          detail: expect.stringContaining("agent-7"),
+          output: "统计技术文件数量",
+        }),
+        expect.objectContaining({
+          id: "send-1",
+          kind: "tool",
+          toolType: "collabToolCall",
+          title: "Collab: send_input",
+          detail: expect.stringContaining("agent-7"),
+          output: "继续执行",
+        }),
+        expect.objectContaining({
+          id: "wait-1",
+          kind: "tool",
+          toolType: "collabToolCall",
+          title: "Collab: wait",
+          detail: expect.stringContaining("agent-7"),
+        }),
+      ]),
+    );
+  });
+
   it("reconstructs nested response_item apply_patch history entries", () => {
     const items = parseCodexSessionHistory({
       entries: [

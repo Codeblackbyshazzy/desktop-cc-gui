@@ -1389,6 +1389,35 @@ export function resolveWorkspaceSessionActivityContext({
     isDescendantOfRoot(thread.id, rootThreadId, threadParentById, fallbackParentById),
   );
 
+  const inferredRelatedThreadIds = new Set<string>([
+    ...Object.keys(threadParentById),
+    ...Object.values(threadParentById),
+    ...Object.keys(fallbackParentById),
+    ...Object.values(fallbackParentById),
+  ]);
+  inferredRelatedThreadIds.forEach((candidateThreadId) => {
+    if (!candidateThreadId || threadMap.has(candidateThreadId)) {
+      return;
+    }
+    if (
+      !isDescendantOfRoot(
+        candidateThreadId,
+        rootThreadId,
+        threadParentById,
+        fallbackParentById,
+      )
+    ) {
+      return;
+    }
+    const inferredThread: ThreadSummary = {
+      id: candidateThreadId,
+      name: candidateThreadId,
+      updatedAt: 0,
+    };
+    threadMap.set(candidateThreadId, inferredThread);
+    relevantThreads.push(inferredThread);
+  });
+
   if (!threadMap.has(activeThreadId)) {
     const fallbackThread: ThreadSummary = {
       id: activeThreadId,

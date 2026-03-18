@@ -742,6 +742,7 @@ export function useThreads({
     loadedThreadsRef,
     replaceOnResumeRef,
     applyCollabThreadLinksFromThread,
+    updateThreadParent,
     onThreadTitleMappingsLoaded: (workspaceId, titles) => {
       Object.entries(titles).forEach(([threadId, title]) => {
         if (!threadId.trim() || !title.trim()) {

@@ -127,6 +127,39 @@ describe("buildWorkspaceSessionActivity", () => {
     expect(result.timeline[0]?.relationshipSource).toBe("fallbackLinking");
   });
 
+  it("includes inferred child thread summaries even when thread list misses them", () => {
+    const threads: ThreadSummary[] = [{ id: "root", name: "Root", updatedAt: 1000 }];
+    const itemsByThread = {
+      root: [
+        toolItem("link-1", {
+          toolType: "collabToolCall",
+          title: "Collab: spawn_agent",
+          detail: "From root → child",
+          status: "completed",
+        }),
+      ],
+      child: [
+        toolItem("cmd-1", {
+          toolType: "commandExecution",
+          title: "Command: pwd",
+          status: "completed",
+          output: "/repo",
+        }),
+      ],
+    };
+
+    const result = buildWorkspaceSessionActivity({
+      activeThreadId: "root",
+      threads,
+      itemsByThread,
+      threadParentById: { child: "root" },
+      threadStatusById: {},
+    });
+
+    expect(result.relevantThreadIds).toEqual(["root", "child"]);
+    expect(result.sessionSummaries.some((summary) => summary.threadId === "child")).toBe(true);
+  });
+
   it("shows reasoning events as a dedicated timeline category", () => {
     const threads: ThreadSummary[] = [{ id: "root", name: "Root", updatedAt: 1000 }];
     const itemsByThread = {

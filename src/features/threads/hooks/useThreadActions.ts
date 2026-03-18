@@ -60,6 +60,7 @@ type UseThreadActionsOptions = {
     threadId: string,
     thread: Record<string, unknown>,
   ) => void;
+  updateThreadParent?: (parentId: string, childIds: string[]) => void;
   onThreadTitleMappingsLoaded?: (
     workspaceId: string,
     titles: Record<string, string>,
@@ -88,7 +89,20 @@ const CODEX_BACKGROUND_HELPER_PROMPT_PREFIXES = [
 ] as const;
 
 function normalizeComparableWorkspacePath(path: string): string {
-  return normalizeRootPath(path).trim();
+  return normalizeWindowsPathForComparison(normalizeRootPath(path).trim());
+}
+
+function normalizeWindowsPathForComparison(path: string): string {
+  if (!path) {
+    return path;
+  }
+  if (path.startsWith("//?/UNC/")) {
+    return `//${path.slice("//?/UNC/".length)}`;
+  }
+  if (path.startsWith("//?/")) {
+    return path.slice("//?/".length);
+  }
+  return path;
 }
 
 function buildWorkspacePathVariants(path: string): Set<string> {
@@ -107,6 +121,9 @@ function buildWorkspacePathVariants(path: string): Set<string> {
     variants.add(`${normalized[0].toLowerCase()}${normalized.slice(1)}`);
     variants.add(normalized.toLowerCase());
   }
+  if (normalized.startsWith("//")) {
+    variants.add(normalized.toLowerCase());
+  }
   return variants;
 }
 
@@ -117,8 +134,16 @@ function matchesWorkspacePath(threadCwd: string, workspacePath: string): boolean
   }
   const threadVariants = buildWorkspacePathVariants(threadCwd);
   for (const candidate of threadVariants) {
-    if (workspaceVariants.has(candidate)) {
-      return true;
+    for (const workspaceCandidate of workspaceVariants) {
+      if (candidate === workspaceCandidate) {
+        return true;
+      }
+      if (
+        candidate.startsWith(workspaceCandidate) &&
+        candidate.charAt(workspaceCandidate.length) === "/"
+      ) {
+        return true;
+      }
     }
   }
   return false;
@@ -166,6 +191,73 @@ function shouldIncludeThreadEntry(thread: Record<string, unknown>): boolean {
   return true;
 }
 
+function parseCollabLinkDetail(detail: string, fallbackParentId: string) {
+  const trimmed = detail.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const hasUnicodeArrow = trimmed.includes("→");
+  const hasAsciiArrow = !hasUnicodeArrow && trimmed.includes("->");
+  if (!hasUnicodeArrow && !hasAsciiArrow) {
+    return null;
+  }
+  const [leftSideRaw, rightSideRaw] = hasUnicodeArrow
+    ? trimmed.split("→", 2)
+    : trimmed.split("->", 2);
+  const leftSide = (leftSideRaw ?? "").trim();
+  const rightSide = (rightSideRaw ?? "").trim();
+  const parentMatch = leftSide.match(/^From\s+(.+)$/i);
+  const parentId = (parentMatch?.[1]?.trim() || fallbackParentId).trim();
+  const childIds = rightSide
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  if (!parentId || childIds.length === 0) {
+    return null;
+  }
+  return { parentId, childIds };
+}
+
+function restoreThreadParentLinksFromSnapshot(
+  threadId: string,
+  items: ConversationItem[],
+  updateThreadParent?: (parentId: string, childIds: string[]) => void,
+) {
+  if (!updateThreadParent) {
+    return;
+  }
+  items.forEach((item) => {
+    if (item.kind !== "tool" || item.toolType !== "collabToolCall") {
+      return;
+    }
+    const parsedLink = parseCollabLinkDetail(item.detail, threadId);
+    if (!parsedLink) {
+      return;
+    }
+    updateThreadParent(parsedLink.parentId, parsedLink.childIds);
+  });
+}
+
+function collectRelatedThreadIdsFromSnapshot(threadId: string, items: ConversationItem[]) {
+  const relatedThreadIds = new Set<string>();
+  items.forEach((item) => {
+    if (item.kind !== "tool" || item.toolType !== "collabToolCall") {
+      return;
+    }
+    const parsedLink = parseCollabLinkDetail(item.detail, threadId);
+    if (!parsedLink) {
+      return;
+    }
+    parsedLink.childIds.forEach((childId) => {
+      if (!childId || childId === threadId) {
+        return;
+      }
+      relatedThreadIds.add(childId);
+    });
+  });
+  return Array.from(relatedThreadIds);
+}
+
 export function useThreadActions({
   dispatch,
   itemsByThread,
@@ -179,6 +271,7 @@ export function useThreadActions({
   loadedThreadsRef,
   replaceOnResumeRef,
   applyCollabThreadLinksFromThread,
+  updateThreadParent,
   onThreadTitleMappingsLoaded,
   onRenameThreadTitleMapping,
   useUnifiedHistoryLoader = false,
@@ -298,22 +391,24 @@ export function useThreadActions({
       if (useUnifiedHistoryLoader) {
         try {
           const workspacePath = workspacePathsByIdRef.current[workspaceId] ?? null;
-          const loader = threadId.startsWith("claude:")
-            ? createClaudeHistoryLoader({
-                workspaceId,
-                workspacePath,
-                loadClaudeSession: loadClaudeSessionService,
-              })
-            : threadId.startsWith("opencode:")
-              ? createOpenCodeHistoryLoader({
+          const createHistoryLoader = (targetThreadId: string) =>
+            targetThreadId.startsWith("claude:")
+              ? createClaudeHistoryLoader({
                   workspaceId,
-                  resumeThread: resumeThreadService,
+                  workspacePath,
+                  loadClaudeSession: loadClaudeSessionService,
                 })
-              : createCodexHistoryLoader({
-                  workspaceId,
-                  resumeThread: resumeThreadService,
-                  loadCodexSession: loadCodexSessionService,
-                });
+              : targetThreadId.startsWith("opencode:")
+                ? createOpenCodeHistoryLoader({
+                    workspaceId,
+                    resumeThread: resumeThreadService,
+                  })
+                : createCodexHistoryLoader({
+                    workspaceId,
+                    resumeThread: resumeThreadService,
+                    loadCodexSession: loadCodexSessionService,
+                  });
+          const loader = createHistoryLoader(threadId);
           const snapshot = await loader.load(threadId);
           dispatch({
             type: "ensureThread",
@@ -330,6 +425,68 @@ export function useThreadActions({
             workspaceId,
             threadId,
           });
+          restoreThreadParentLinksFromSnapshot(
+            threadId,
+            snapshot.items,
+            updateThreadParent,
+          );
+          const relatedThreadIds = collectRelatedThreadIdsFromSnapshot(
+            threadId,
+            snapshot.items,
+          );
+          relatedThreadIds.forEach((relatedThreadId) => {
+            dispatch({
+              type: "ensureThread",
+              workspaceId,
+              threadId: relatedThreadId,
+              engine: "codex",
+            });
+          });
+          for (const relatedThreadId of relatedThreadIds) {
+            if (
+              !relatedThreadId ||
+              relatedThreadId === threadId ||
+              loadedThreadsRef.current[relatedThreadId]
+            ) {
+              continue;
+            }
+            try {
+              const relatedSnapshot = await createHistoryLoader(relatedThreadId).load(
+                relatedThreadId,
+              );
+              if (relatedSnapshot.items.length > 0) {
+                dispatch({
+                  type: "setThreadItems",
+                  threadId: relatedThreadId,
+                  items: relatedSnapshot.items,
+                });
+              }
+              dispatch({
+                type: "setThreadPlan",
+                threadId: relatedThreadId,
+                plan: relatedSnapshot.plan,
+              });
+              restoreThreadParentLinksFromSnapshot(
+                relatedThreadId,
+                relatedSnapshot.items,
+                updateThreadParent,
+              );
+              loadedThreadsRef.current[relatedThreadId] = true;
+            } catch (error) {
+              onDebug?.({
+                id: `${Date.now()}-history-loader-related-error`,
+                timestamp: Date.now(),
+                source: "error",
+                label: "thread/history related loader error",
+                payload: {
+                  workspaceId,
+                  threadId,
+                  relatedThreadId,
+                  error: error instanceof Error ? error.message : String(error),
+                },
+              });
+            }
+          }
           snapshot.userInputQueue.forEach((request) => {
             dispatch({ type: "addUserInputRequest", request });
           });
@@ -537,6 +694,7 @@ export function useThreadActions({
     },
     [
       applyCollabThreadLinksFromThread,
+      updateThreadParent,
       dispatch,
       getCustomName,
       itemsByThread,

@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import Activity from "lucide-react/dist/esm/icons/activity";
 import Bot from "lucide-react/dist/esm/icons/bot";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
@@ -9,7 +8,7 @@ import LayoutList from "lucide-react/dist/esm/icons/layout-list";
 import ListTodo from "lucide-react/dist/esm/icons/list-todo";
 import Search from "lucide-react/dist/esm/icons/search";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { Markdown } from "../../messages/components/Markdown";
 import {
   inferCommandOutputRenderMeta,
@@ -17,7 +16,11 @@ import {
   renderCodeOutputHtml,
   renderShellOutputHtml,
 } from "../utils/shellOutputHighlight";
-import type { SessionActivityEvent, WorkspaceSessionActivityViewModel } from "../types";
+import type {
+  SessionActivityEvent,
+  SessionActivitySessionSummary,
+  WorkspaceSessionActivityViewModel,
+} from "../types";
 
 type WorkspaceSessionActivityPanelProps = {
   workspaceId: string | null;
@@ -35,14 +38,27 @@ type WorkspaceSessionActivityPanelProps = {
 type ActivityTab = "all" | "command" | "fileChange" | "task" | "explore" | "reasoning";
 type SessionActivityTurnGroup = {
   id: string;
+  threadId: string;
   turnIndex: number | null;
   threadName: string;
   sessionRole: SessionActivityEvent["sessionRole"];
   occurredAt: number;
   events: SessionActivityEvent[];
 };
+type StickyChildSessionSummary = SessionActivitySessionSummary & {
+  lastSeenAt: number;
+};
 
 const RUNNING_CARD_MIN_EXPANDED_MS = 2000;
+const MAX_STICKY_CHILD_SESSION_COUNT = 24;
+const SESSION_PILL_COLOR_PALETTE = [
+  { hue: 158, saturation: 66, lightness: 44 },
+  { hue: 210, saturation: 72, lightness: 48 },
+  { hue: 258, saturation: 68, lightness: 56 },
+  { hue: 24, saturation: 88, lightness: 56 },
+  { hue: 338, saturation: 76, lightness: 55 },
+  { hue: 186, saturation: 70, lightness: 46 },
+] as const;
 
 const tabIconMap: Record<ActivityTab, ReactNode> = {
   all: <LayoutList size={14} aria-hidden />,
@@ -242,6 +258,51 @@ function truncateCollapsedCommand(command: string, maxLength = 108) {
   return `${command.slice(0, maxLength - 1)}…`;
 }
 
+function extractAgentNumber(value: string) {
+  const agentMatch = value.match(/\bagent\s*([0-9]{1,4})\b/i);
+  if (!agentMatch?.[1]) {
+    return null;
+  }
+  return agentMatch[1];
+}
+
+function resolveChildSessionPillLabel(
+  session: SessionActivitySessionSummary,
+  index: number,
+  t: ReturnType<typeof useTranslation>["t"],
+) {
+  const fromName = extractAgentNumber(session.threadName);
+  if (fromName) {
+    return `Agent ${fromName}`;
+  }
+  const fromThreadId = extractAgentNumber(session.threadId);
+  if (fromThreadId) {
+    return `Agent ${fromThreadId}`;
+  }
+  return `${t("activityPanel.childSession")} ${index + 1}`;
+}
+
+function resolveStringHash(value: string) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return hash;
+}
+
+function resolveSessionPillStyle(
+  session: SessionActivitySessionSummary,
+  index: number,
+): CSSProperties & Record<string, string> {
+  const hashSeed = resolveStringHash(`${session.threadId}:${session.threadName}:${index}`);
+  const paletteEntry = SESSION_PILL_COLOR_PALETTE[hashSeed % SESSION_PILL_COLOR_PALETTE.length];
+  return {
+    "--session-pill-accent-h": `${paletteEntry.hue}`,
+    "--session-pill-accent-s": `${paletteEntry.saturation}%`,
+    "--session-pill-accent-l": `${paletteEntry.lightness}%`,
+  };
+}
+
 function shouldAutoExpandRunningEvent(
   event: SessionActivityEvent,
   latestRunningReasoningEventId: string | null,
@@ -320,6 +381,10 @@ export function WorkspaceSessionActivityPanel({
     {},
   );
   const reasoningPreviewScrollContainerByEventIdRef = useRef<Record<string, HTMLDivElement>>({});
+  const activityScopeRef = useRef<string | null>(null);
+  const [stickyChildSessionSummariesByThreadId, setStickyChildSessionSummariesByThreadId] = useState<
+    Record<string, StickyChildSessionSummary>
+  >({});
 
   const emptyCopy = useMemo(() => {
     if (viewModel.emptyState === "running") {
@@ -366,6 +431,7 @@ export function WorkspaceSessionActivityPanel({
       }
       groupsById.set(groupId, {
         id: groupId,
+        threadId: event.threadId,
         turnIndex: groupTurnIndex,
         threadName: event.threadName,
         sessionRole: event.sessionRole,
@@ -409,6 +475,38 @@ export function WorkspaceSessionActivityPanel({
     () => viewModel.sessionSummaries.filter((session) => session.sessionRole === "child"),
     [viewModel.sessionSummaries],
   );
+  const stickyChildSessionSummaries = useMemo(() => {
+    const mergedByThreadId = new Map<string, StickyChildSessionSummary>(
+      Object.values(stickyChildSessionSummariesByThreadId).map((session) => [
+        session.threadId,
+        session,
+      ]),
+    );
+    for (const session of relatedSessionSummaries) {
+      const existing = mergedByThreadId.get(session.threadId);
+      mergedByThreadId.set(session.threadId, {
+        ...session,
+        lastSeenAt: existing?.lastSeenAt ?? 0,
+      });
+    }
+    return Array.from(mergedByThreadId.values()).sort((left, right) => {
+      if (left.isProcessing !== right.isProcessing) {
+        return left.isProcessing ? -1 : 1;
+      }
+      if (left.lastSeenAt !== right.lastSeenAt) {
+        return right.lastSeenAt - left.lastSeenAt;
+      }
+      return right.eventCount - left.eventCount;
+    });
+  }, [relatedSessionSummaries, stickyChildSessionSummariesByThreadId]);
+
+  const childSessionStyleByThreadId = useMemo(() => {
+    const styleMap = new Map<string, CSSProperties & Record<string, string>>();
+    stickyChildSessionSummaries.forEach((session, index) => {
+      styleMap.set(session.threadId, resolveSessionPillStyle(session, index));
+    });
+    return styleMap;
+  }, [stickyChildSessionSummaries]);
   const latestRunningReasoningEventId = useMemo(() => {
     let latestEvent: SessionActivityEvent | null = null;
     for (const event of viewModel.timeline) {
@@ -428,6 +526,53 @@ export function WorkspaceSessionActivityPanel({
     }
     setActiveTab("all");
   }, [activeTab, tabCounts]);
+
+  useEffect(() => {
+    const scope = `${workspaceId ?? "__none__"}:${viewModel.rootThreadId ?? "__none__"}`;
+    if (activityScopeRef.current === scope) {
+      return;
+    }
+    activityScopeRef.current = scope;
+    setStickyChildSessionSummariesByThreadId({});
+  }, [workspaceId, viewModel.rootThreadId]);
+
+  useEffect(() => {
+    if (relatedSessionSummaries.length === 0) {
+      return;
+    }
+    setStickyChildSessionSummariesByThreadId((current) => {
+      let changed = false;
+      const next: Record<string, StickyChildSessionSummary> = { ...current };
+      for (let index = 0; index < relatedSessionSummaries.length; index += 1) {
+        const session = relatedSessionSummaries[index];
+        const existing = current[session.threadId];
+        const candidate: StickyChildSessionSummary = {
+          ...session,
+          lastSeenAt: existing?.lastSeenAt ?? Date.now() + index,
+        };
+        if (
+          !existing ||
+          existing.threadName !== candidate.threadName ||
+          existing.relationshipSource !== candidate.relationshipSource ||
+          existing.eventCount !== candidate.eventCount ||
+          existing.isProcessing !== candidate.isProcessing
+        ) {
+          next[session.threadId] = candidate;
+          changed = true;
+        }
+      }
+
+      const sorted = Object.values(next).sort((left, right) => right.lastSeenAt - left.lastSeenAt);
+      if (sorted.length > MAX_STICKY_CHILD_SESSION_COUNT) {
+        for (const stale of sorted.slice(MAX_STICKY_CHILD_SESSION_COUNT)) {
+          delete next[stale.threadId];
+        }
+        changed = true;
+      }
+
+      return changed ? next : current;
+    });
+  }, [relatedSessionSummaries]);
 
   useEffect(() => {
     if (groupedTimeline.length === 0) {
@@ -989,7 +1134,6 @@ export function WorkspaceSessionActivityPanel({
             <div
               className={`session-activity-title-row${viewModel.isProcessing ? " is-live" : ""}`}
             >
-              <Activity size={15} aria-hidden />
               <span>{t("activityPanel.title")}</span>
             </div>
             {onToggleLiveEditPreview ? (
@@ -1031,38 +1175,51 @@ export function WorkspaceSessionActivityPanel({
                   <span className="session-activity-tab-count">{tabCounts[tab.id]}</span>
                 </button>
               ))}
-              {relatedSessionSummaries.length > 0 ? (
-                <div
-                  className="session-activity-related-inline"
-                  role="group"
-                  aria-label={t("activityPanel.relatedSessions")}
-                >
-                  <span className="session-activity-related-label">
-                    {t("activityPanel.relatedSessions")}
-                  </span>
-                  {relatedSessionSummaries.map((session) => (
-                    <button
-                      key={session.threadId}
-                      type="button"
-                      className={`session-activity-session-pill${session.isProcessing ? " is-processing" : ""}`}
-                      onClick={() => onSelectThread(workspaceId, session.threadId)}
-                      title={session.threadName}
-                    >
-                      <span className="session-activity-session-name">{session.threadName}</span>
-                      {session.relationshipSource === "fallbackLinking" ? (
-                        <span className="session-activity-session-meta">
-                          {t("activityPanel.fallbackLinking")}
-                        </span>
-                      ) : null}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
             </div>
           ) : null}
         </div>
         <div className="session-activity-summary">{headerSummary}</div>
       </div>
+
+      {stickyChildSessionSummaries.length > 0 ? (
+        <div
+          className="session-activity-related-toolbar"
+          aria-label={t("activityPanel.relatedSessions")}
+        >
+          <div className="session-activity-related-toolbar-scroller">
+            {stickyChildSessionSummaries.map((session, index) => {
+              const fixedLabel = resolveChildSessionPillLabel(session, index, t);
+              const pillStyle = resolveSessionPillStyle(session, index);
+              return (
+                <div
+                  key={session.threadId}
+                  className={`session-activity-session-pill${session.isProcessing ? " is-processing" : ""}`}
+                  style={pillStyle}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={fixedLabel}
+                  title={session.threadName}
+                  onClick={() => onSelectThread(workspaceId, session.threadId)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onSelectThread(workspaceId, session.threadId);
+                    }
+                  }}
+                >
+                  <Bot size={12} aria-hidden />
+                  <span className="session-activity-session-name">{fixedLabel}</span>
+                  {session.relationshipSource === "fallbackLinking" ? (
+                    <span className="session-activity-session-meta">
+                      {t("activityPanel.fallbackLinking")}
+                    </span>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
       {filteredTimeline.length === 0 ? (
         <div className="session-activity-empty">{emptyCopy}</div>
@@ -1081,7 +1238,16 @@ export function WorkspaceSessionActivityPanel({
                     : t("activityPanel.collapseTurnGroup")
                 }
               >
-                <span className="session-activity-turn-group-title">
+                <span
+                  className={`session-activity-turn-group-title${
+                    group.sessionRole === "child" ? " is-child" : ""
+                  }`}
+                  style={
+                    group.sessionRole === "child"
+                      ? childSessionStyleByThreadId.get(group.threadId)
+                      : undefined
+                  }
+                >
                   {group.turnIndex
                     ? t("activityPanel.turnGroup", { index: group.turnIndex })
                     : t("activityPanel.turnGroupFallback")}

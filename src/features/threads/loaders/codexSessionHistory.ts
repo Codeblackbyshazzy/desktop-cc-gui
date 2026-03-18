@@ -14,6 +14,22 @@ type PendingApplyPatch = {
   input: string;
   status: string;
 };
+type PendingCollabToolCall = {
+  callId: string;
+  tool: string;
+  senderThreadId: string;
+  receiverThreadIds: string[];
+  prompt: string;
+  status: string;
+};
+
+const COLLAB_TOOL_CALL_NAMES = new Set([
+  "spawn_agent",
+  "send_input",
+  "wait",
+  "resume_agent",
+  "close_agent",
+]);
 
 function compactComparableReasoningSnapshotText(value: string) {
   return value
@@ -126,6 +142,111 @@ function parseJsonRecord(value: unknown): Record<string, unknown> {
   }
 }
 
+function parseJsonUnknown(value: unknown): unknown {
+  if (typeof value !== "string") {
+    return value;
+  }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function toStringList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => asString(entry).trim())
+      .filter(Boolean);
+  }
+  const normalized = asString(value).trim();
+  if (!normalized) {
+    return [];
+  }
+  if (normalized.startsWith("[") && normalized.endsWith("]")) {
+    const parsed = parseJsonUnknown(normalized);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map((entry) => asString(entry).trim())
+        .filter(Boolean);
+    }
+  }
+  if (normalized.includes(",")) {
+    return normalized
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  }
+  return [normalized];
+}
+
+function uniqueStringList(values: string[]): string[] {
+  const seen = new Set<string>();
+  const deduped: string[] = [];
+  values.forEach((value) => {
+    const normalized = value.trim();
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    deduped.push(normalized);
+  });
+  return deduped;
+}
+
+function isCollabToolCall(name: string) {
+  return COLLAB_TOOL_CALL_NAMES.has(name.trim());
+}
+
+function extractCollabPrompt(argumentsRecord: Record<string, unknown>) {
+  return asString(
+    argumentsRecord.message ??
+      argumentsRecord.prompt ??
+      argumentsRecord.instructions ??
+      argumentsRecord.instruction ??
+      "",
+  ).trim();
+}
+
+function extractThreadIdsFromRecord(record: Record<string, unknown>): string[] {
+  const ids = [
+    ...toStringList(
+      record.receiverThreadIds ??
+        record.receiver_thread_ids ??
+        record.newThreadIds ??
+        record.new_thread_ids ??
+        record.threadIds ??
+        record.thread_ids ??
+        record.agentIds ??
+        record.agent_ids ??
+        record.ids,
+    ),
+    ...toStringList(
+      record.receiverThreadId ??
+        record.receiver_thread_id ??
+        record.newThreadId ??
+        record.new_thread_id ??
+        record.threadId ??
+        record.thread_id ??
+        record.agentId ??
+        record.agent_id ??
+        record.id,
+    ),
+  ];
+  return uniqueStringList(ids);
+}
+
+function extractThreadIdsFromStatusRecords(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return uniqueStringList(
+    value
+      .map((entry) => asRecord(entry))
+      .flatMap((entry) => extractThreadIdsFromRecord(entry)),
+  );
+}
+
 function extractMessageText(payload: Record<string, unknown>) {
   const content = Array.isArray(payload.content) ? payload.content : [];
   const parts = content
@@ -225,6 +346,21 @@ function buildApplyPatchItem({
   });
 }
 
+function buildCollabToolCallItem(pending: PendingCollabToolCall) {
+  if (!pending.callId.trim() || !pending.tool.trim()) {
+    return null;
+  }
+  return buildConversationItem({
+    id: pending.callId,
+    type: "collabToolCall",
+    tool: pending.tool,
+    status: pending.status,
+    senderThreadId: pending.senderThreadId,
+    receiverThreadIds: pending.receiverThreadIds,
+    prompt: pending.prompt,
+  });
+}
+
 function stageApplyPatchCall(
   payload: Record<string, unknown>,
   pendingApplyPatches: Map<string, PendingApplyPatch>,
@@ -265,11 +401,78 @@ function flushApplyPatchOutput(
   });
 }
 
+function stageCollabToolCall(
+  payload: Record<string, unknown>,
+  pendingCollabToolCalls: Map<string, PendingCollabToolCall>,
+) {
+  const tool = asString(payload.name).trim();
+  if (!isCollabToolCall(tool)) {
+    return false;
+  }
+  const callId = asString(payload.call_id ?? payload.callId ?? "").trim();
+  if (!callId) {
+    return true;
+  }
+  const argumentsRecord = parseJsonRecord(payload.arguments);
+  pendingCollabToolCalls.set(callId, {
+    callId,
+    tool,
+    senderThreadId: asString(
+      argumentsRecord.senderThreadId ??
+        argumentsRecord.sender_thread_id ??
+        argumentsRecord.parentThreadId ??
+        argumentsRecord.parent_thread_id ??
+        "",
+    ).trim(),
+    receiverThreadIds: extractThreadIdsFromRecord(argumentsRecord),
+    prompt: extractCollabPrompt(argumentsRecord),
+    status: asString(payload.status ?? "completed").trim() || "completed",
+  });
+  return true;
+}
+
+function extractCollabOutputRecord(payload: Record<string, unknown>) {
+  const parsedOutput = parseJsonUnknown(payload.output ?? payload.result ?? payload.response);
+  const outputRecord = asRecord(parsedOutput);
+  if (Object.keys(outputRecord).length > 0) {
+    return outputRecord;
+  }
+  return parseJsonRecord(payload.data);
+}
+
+function flushCollabToolCallOutput(
+  payload: Record<string, unknown>,
+  pendingCollabToolCalls: Map<string, PendingCollabToolCall>,
+) {
+  const callId = asString(payload.call_id ?? payload.callId ?? "").trim();
+  if (!callId) {
+    return null;
+  }
+  const pending = pendingCollabToolCalls.get(callId);
+  if (!pending) {
+    return null;
+  }
+  pendingCollabToolCalls.delete(callId);
+  const outputRecord = extractCollabOutputRecord(payload);
+  const mergedReceiverThreadIds = uniqueStringList([
+    ...pending.receiverThreadIds,
+    ...extractThreadIdsFromRecord(outputRecord),
+    ...extractThreadIdsFromStatusRecords(outputRecord.statuses ?? outputRecord.results),
+    ...extractThreadIdsFromRecord(asRecord(outputRecord.agent)),
+  ]);
+  return buildCollabToolCallItem({
+    ...pending,
+    status: asString(payload.status ?? pending.status ?? "completed").trim() || "completed",
+    receiverThreadIds: mergedReceiverThreadIds,
+  });
+}
+
 export function parseCodexSessionHistory(input: unknown): ConversationItem[] {
   const entries = toEntryList(input);
   const items: ConversationItem[] = [];
   const pendingCommands = new Map<string, PendingCommandExecution>();
   const pendingApplyPatches = new Map<string, PendingApplyPatch>();
+  const pendingCollabToolCalls = new Map<string, PendingCollabToolCall>();
 
   entries.forEach((entry, index) => {
     const entryType = asString(entry.type).trim();
@@ -288,40 +491,50 @@ export function parseCodexSessionHistory(input: unknown): ConversationItem[] {
         return;
       }
 
-      if (payloadType === "function_call" && asString(payload.name).trim() === "exec_command") {
-        const callId = asString(payload.call_id ?? payload.callId ?? "").trim();
-        if (!callId) {
+      if (payloadType === "function_call") {
+        const functionName = asString(payload.name).trim();
+        if (functionName === "exec_command") {
+          const callId = asString(payload.call_id ?? payload.callId ?? "").trim();
+          if (!callId) {
+            return;
+          }
+          const argumentsRecord = parseJsonRecord(payload.arguments);
+          pendingCommands.set(callId, {
+            callId,
+            command: asString(
+              argumentsRecord.cmd ?? argumentsRecord.command ?? argumentsRecord.argv ?? "",
+            ).trim(),
+            cwd: asString(
+              argumentsRecord.workdir ??
+                argumentsRecord.cwd ??
+                argumentsRecord.working_directory ??
+                "",
+            ).trim(),
+            description: asString(
+              argumentsRecord.justification ?? argumentsRecord.description ?? "",
+            ).trim(),
+          });
           return;
         }
-        const argumentsRecord = parseJsonRecord(payload.arguments);
-        pendingCommands.set(callId, {
-          callId,
-          command: asString(
-            argumentsRecord.cmd ?? argumentsRecord.command ?? argumentsRecord.argv ?? "",
-          ).trim(),
-          cwd: asString(
-            argumentsRecord.workdir ??
-              argumentsRecord.cwd ??
-              argumentsRecord.working_directory ??
-              "",
-          ).trim(),
-          description: asString(
-            argumentsRecord.justification ?? argumentsRecord.description ?? "",
-          ).trim(),
-        });
-        return;
+        if (stageCollabToolCall(payload, pendingCollabToolCalls)) {
+          return;
+        }
       }
 
       if (payloadType === "function_call_output") {
         const callId = asString(payload.call_id ?? payload.callId ?? "").trim();
         const pending = pendingCommands.get(callId);
-        if (!pending) {
+        if (pending) {
+          const command = buildCommandExecutionItem(pending, payload);
+          pendingCommands.delete(callId);
+          if (command) {
+            items.push(command);
+          }
           return;
         }
-        const command = buildCommandExecutionItem(pending, payload);
-        pendingCommands.delete(callId);
-        if (command) {
-          items.push(command);
+        const collabToolCall = flushCollabToolCallOutput(payload, pendingCollabToolCalls);
+        if (collabToolCall) {
+          items.push(collabToolCall);
         }
         return;
       }
@@ -409,6 +622,16 @@ export function parseCodexSessionHistory(input: unknown): ConversationItem[] {
     });
     if (fileChange) {
       items.push(fileChange);
+    }
+  });
+
+  pendingCollabToolCalls.forEach((pending) => {
+    const collabToolCall = buildCollabToolCallItem({
+      ...pending,
+      status: pending.status || "started",
+    });
+    if (collabToolCall) {
+      items.push(collabToolCall);
     }
   });
 

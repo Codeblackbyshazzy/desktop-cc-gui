@@ -8,19 +8,43 @@ English:
 
 ✨ Features
 - Add Session Radar panel in workspace to aggregate session status and improve at-a-glance visibility
+- Persist Session Radar completion records with stronger cross-workspace recovery
+- Add quick engine switching entry via bottom icon controls in composer
+- Support project-root-based custom Spec path resolution with automatic `openspec` discovery
+
+🔧 Improvements
+- Refine Session Radar read-state icon behavior and selected-state colors under dark theme
+- Polish selected icon style for panel tabs with cleaner border-only visual feedback
 
 🐛 Fixes
 - Fix composer input overflow caused by long `MessageQueue` text blocks
 - Fix `MessageQueue` queue type reference mismatch in chat input path
+- Fix dual-display fullscreen drag freeze issue on Windows
+- Fix file tree root collapse interaction and drag cursor compatibility
+- Fix session badge and `Default` label contrast across light/dark themes
+- Fix desktop light-theme selector consistency and color mismatch on macOS
+- Fix inconsistent worktree info popover color styling
 
 中文：
 
 ✨ Features
 - 新增工作区 Session Radar 雷达面板，聚合会话状态并提升全局可观测性
+- 持久化 Session Radar 完成记录，增强跨工作区恢复能力
+- 在输入框底部 icon 区新增引擎快速切换入口
+- 支持以项目根为语义的自定义 Spec 路径，并自动解析 `openspec`
+
+🔧 Improvements
+- 优化 Session Radar 已读状态图标表现与深色主题选中色彩
+- 调整面板 Tab 图标选中态为更简洁的无背景边框风格
 
 🐛 Fixes
 - 修复长文本 `MessageQueue` 场景下输入区布局溢出问题
 - 修复聊天输入链路中 `MessageQueue` 队列类型引用错误
+- 修复 Windows 双屏全屏拖拽导致白屏卡死问题
+- 修复文件树根目录折叠交互并优化拖拽抓取光标兼容性
+- 修复深浅主题下会话徽标与 `Default` 标签对比度问题
+- 统一桌面端浅色主题 selector 下拉样式并修复 macOS 色差
+- 修复工作树信息弹层配色不一致问题
 
 ---
 

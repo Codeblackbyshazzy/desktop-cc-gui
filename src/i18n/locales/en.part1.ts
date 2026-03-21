@@ -1853,7 +1853,7 @@ const enPart1 = {
     enableLiveEditPreview: "Enable live edit preview",
     disableLiveEditPreview: "Disable live edit preview",
     followCoachTitle: "Try Live Follow",
-    followCoachBody: "Turn this on to keep the editor synced with files AI is actively changing.",
+    followCoachBody: "Turn on to follow files AI is editing.",
     followCoachEnable: "Enable now",
     followCoachDismiss: "Not now",
     followNudgeTitle: "Live follow",

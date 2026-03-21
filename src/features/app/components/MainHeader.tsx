@@ -329,9 +329,11 @@ export function MainHeader({
               {parentName ? parentName : workspace.name}
             </span>
           )}
-          <span className="workspace-separator" aria-hidden>
-            ›
-          </span>
+          {!showProjectMenu ? (
+            <span className="workspace-separator" aria-hidden>
+              ›
+            </span>
+          ) : null}
           {disableBranchMenu ? (
             <div className="workspace-branch-static-row" ref={infoRef}>
               <button

@@ -138,4 +138,51 @@ describe("KanbanColumn bulk complete confirm", () => {
       "done",
     );
   });
+
+  it("does not bulk complete when confirmation api is unavailable", () => {
+    const onBulkMoveGroup = vi.fn();
+    const originalConfirm = window.confirm;
+    const head = createTask("head");
+    const downstream: KanbanTask = {
+      ...createTask("downstream"),
+      chain: {
+        groupId: "group-1",
+        previousTaskId: "head",
+        groupCode: "123",
+      },
+    };
+    Object.defineProperty(window, "confirm", {
+      value: undefined,
+      writable: true,
+      configurable: true,
+    });
+
+    try {
+      render(
+        <KanbanColumn
+          column={column}
+          tasks={[head, downstream]}
+          allTasks={[head, downstream]}
+          selectedTaskId={null}
+          taskProcessingMap={{}}
+          onAddTask={vi.fn()}
+          onDeleteTask={vi.fn()}
+          onToggleSchedulePausedTask={vi.fn()}
+          onCancelOrBlockTask={vi.fn()}
+          onSelectTask={vi.fn()}
+          onBulkMoveGroup={onBulkMoveGroup}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "kanban.task.group.bulkComplete" }));
+
+      expect(onBulkMoveGroup).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(window, "confirm", {
+        value: originalConfirm,
+        writable: true,
+        configurable: true,
+      });
+    }
+  });
 });

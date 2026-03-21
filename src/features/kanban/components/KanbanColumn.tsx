@@ -685,10 +685,11 @@ export function KanbanColumn({
                           title={t("kanban.task.group.bulkComplete")}
                           onClick={(event) => {
                             event.stopPropagation();
+                            const confirmFn =
+                              typeof window !== "undefined" ? window.confirm : undefined;
                             const shouldProceed =
-                              typeof window === "undefined" ||
-                              typeof window.confirm !== "function" ||
-                              window.confirm(
+                              typeof confirmFn === "function" &&
+                              confirmFn(
                                 t("kanban.task.group.bulkCompleteConfirm", {
                                   count: groupTaskIds.length,
                                 }),

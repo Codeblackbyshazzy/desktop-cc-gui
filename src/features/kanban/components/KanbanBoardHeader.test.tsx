@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceInfo } from "../../../types";
 import type { KanbanPanel } from "../types";
 import { KanbanBoardHeader } from "./KanbanBoardHeader";
@@ -46,6 +46,10 @@ const panelB: KanbanPanel = {
   updatedAt: 1,
 };
 
+afterEach(() => {
+  cleanup();
+});
+
 describe("KanbanBoardHeader back menu", () => {
   it("shows merged back menu and triggers each sub action", () => {
     const onBack = vi.fn();
@@ -85,5 +89,42 @@ describe("KanbanBoardHeader back menu", () => {
     );
 
     expect(onAppModeChange).toHaveBeenCalledWith("chat");
+  });
+
+  it("closes back menu on outside pointer press", () => {
+    render(
+      <KanbanBoardHeader
+        workspace={workspaceA}
+        workspaces={[workspaceA, workspaceB]}
+        panel={panelA}
+        panels={[panelA, panelB]}
+        onBack={vi.fn()}
+        onAppModeChange={vi.fn()}
+        onSelectWorkspace={vi.fn()}
+        onSelectPanel={vi.fn()}
+        searchQuery=""
+        onSearchChange={vi.fn()}
+        showGitPanel={false}
+        onToggleGitPanel={vi.fn()}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", {
+      name: "kanban.board.backActions",
+    });
+    fireEvent.click(trigger);
+    expect(
+      screen.getByRole("menuitem", { name: "kanban.board.backToPanels" }),
+    ).toBeTruthy();
+
+    if ("PointerEvent" in window) {
+      fireEvent.pointerDown(document.body);
+    } else {
+      fireEvent.mouseDown(document.body);
+    }
+
+    expect(
+      screen.queryByRole("menuitem", { name: "kanban.board.backToPanels" }),
+    ).toBeNull();
   });
 });

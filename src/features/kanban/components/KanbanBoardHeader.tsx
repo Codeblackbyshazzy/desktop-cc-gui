@@ -88,14 +88,15 @@ export function KanbanBoardHeader({
 
   useEffect(() => {
     if (!backMenuOpen) return;
-    const handleClick = (event: MouseEvent) => {
+    const handleClick = (event: Event) => {
       const target = event.target as Node;
       if (!(backMenuRef.current?.contains(target) ?? false)) {
         setBackMenuOpen(false);
       }
     };
-    window.addEventListener("mousedown", handleClick);
-    return () => window.removeEventListener("mousedown", handleClick);
+    const outsidePressEvent = "PointerEvent" in window ? "pointerdown" : "mousedown";
+    window.addEventListener(outsidePressEvent, handleClick);
+    return () => window.removeEventListener(outsidePressEvent, handleClick);
   }, [backMenuOpen]);
 
   useEffect(() => {

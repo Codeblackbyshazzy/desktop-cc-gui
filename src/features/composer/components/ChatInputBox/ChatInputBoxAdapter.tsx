@@ -1123,7 +1123,7 @@ export const ChatInputBoxAdapter = forwardRef<ChatInputBoxHandle, ChatInputBoxAd
         onStop={onStop}
         onInput={handleInput}
         attachments={pathsToAttachments(attachments)}
-        onAddAttachment={onAddAttachment ? (_files: FileList) => {
+        onAddAttachment={onAddAttachment ? (_files?: FileList | null) => {
           // In Tauri, we use the native file picker instead of FileList
           onAddAttachment?.();
         } : undefined}

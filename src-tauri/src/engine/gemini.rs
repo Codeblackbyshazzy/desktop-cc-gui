@@ -1471,6 +1471,81 @@ fn is_completion_event_type(event_type: &str) -> bool {
     )
 }
 
+fn is_response_item_event_type(event_type: &str) -> bool {
+    let normalized = event_type.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        return false;
+    }
+    matches!(
+        normalized.as_str(),
+        "response_item"
+            | "response.item"
+            | "response_item_added"
+            | "response.output_item.added"
+            | "response_output_item_added"
+            | "response.output_item.delta"
+            | "response_output_item_delta"
+            | "response.output_item.done"
+            | "response_output_item_done"
+    ) || (normalized.contains("response") && normalized.contains("item"))
+}
+
+fn extract_response_item_payload<'a>(event: &'a Value) -> Option<&'a Value> {
+    for key in [
+        "payload",
+        "item",
+        "output_item",
+        "outputItem",
+        "message",
+        "part",
+        "data",
+        "response",
+    ] {
+        if let Some(value) = event.get(key) {
+            return Some(value);
+        }
+    }
+    None
+}
+
+fn parse_response_item_event(
+    workspace_id: &str,
+    event_type: &str,
+    event: &Value,
+) -> Option<EngineEvent> {
+    let payload = extract_response_item_payload(event).unwrap_or(event);
+    if let Some(payload_type) = payload.get("type").and_then(|value| value.as_str()) {
+        let normalized_event_type = event_type.trim().to_ascii_lowercase();
+        let normalized_payload_type = payload_type.trim().to_ascii_lowercase();
+        if !normalized_payload_type.is_empty() && normalized_payload_type != normalized_event_type {
+            if let Some(parsed) = parse_gemini_event(workspace_id, payload) {
+                return Some(parsed);
+            }
+        }
+    }
+
+    let role = payload
+        .get("role")
+        .and_then(|value| value.as_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if role == "user" || role == "system" {
+        return None;
+    }
+    if should_treat_message_as_reasoning(payload, &role) {
+        let text = extract_reasoning_event_text(payload)?;
+        return Some(EngineEvent::ReasoningDelta {
+            workspace_id: workspace_id.to_string(),
+            text,
+        });
+    }
+    let text = extract_event_text(payload)?;
+    Some(EngineEvent::TextDelta {
+        workspace_id: workspace_id.to_string(),
+        text,
+    })
+}
+
 fn find_tool_calls_array<'a>(value: &'a Value, depth: usize) -> Option<&'a Vec<Value>> {
     if depth > 6 {
         return None;
@@ -1689,6 +1764,11 @@ fn extract_tool_events_from_snapshot(
 
 fn parse_gemini_event(workspace_id: &str, event: &Value) -> Option<EngineEvent> {
     let event_type = event.get("type").and_then(|v| v.as_str())?;
+    if is_response_item_event_type(event_type) {
+        if let Some(parsed) = parse_response_item_event(workspace_id, event_type, event) {
+            return Some(parsed);
+        }
+    }
     match event_type {
         "text"
         | "content_delta"
@@ -2212,6 +2292,73 @@ mod tests {
             }
             _ => panic!("expected TextDelta"),
         }
+    }
+
+    #[test]
+    fn parse_response_item_payload_message_maps_to_text_delta() {
+        let payload = json!({
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": "第一段正文"
+                    }
+                ]
+            }
+        });
+        let parsed = parse_gemini_event("workspace-1", &payload);
+        match parsed {
+            Some(EngineEvent::TextDelta { text, .. }) => {
+                assert_eq!(text, "第一段正文");
+            }
+            _ => panic!("expected TextDelta"),
+        }
+    }
+
+    #[test]
+    fn parse_response_output_item_added_maps_to_text_delta() {
+        let payload = json!({
+            "type": "response.output_item.added",
+            "item": {
+                "type": "message",
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": "第二段正文"
+                    }
+                ]
+            }
+        });
+        let parsed = parse_gemini_event("workspace-1", &payload);
+        match parsed {
+            Some(EngineEvent::TextDelta { text, .. }) => {
+                assert_eq!(text, "第二段正文");
+            }
+            _ => panic!("expected TextDelta"),
+        }
+    }
+
+    #[test]
+    fn parse_response_item_with_user_role_is_ignored() {
+        let payload = json!({
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": "用户输入"
+                    }
+                ]
+            }
+        });
+        let parsed = parse_gemini_event("workspace-1", &payload);
+        assert!(parsed.is_none());
     }
 
     #[test]

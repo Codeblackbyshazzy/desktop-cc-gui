@@ -114,6 +114,10 @@ import type { SearchContentFilter, SearchResult, SearchScope } from "./features/
 import { toggleSearchContentFilters } from "./features/search/utils/contentFilters";
 import { resolveSearchScopeOnOpen } from "./features/search/utils/scope";
 import {
+  buildDetachedFileExplorerSession,
+  openOrFocusDetachedFileExplorer,
+} from "./features/files/detachedFileExplorer";
+import {
   getSelectedAgentConfig,
   getOpenCodeAgentsList,
   ensureWorkspacePathDir,
@@ -141,6 +145,7 @@ import { useCodeCssVars } from "./features/app/hooks/useCodeCssVars";
 import { useAccountSwitching } from "./features/app/hooks/useAccountSwitching";
 import { useMenuLocalization } from "./features/app/hooks/useMenuLocalization";
 import { sendSystemNotification, setNotificationActionHandler } from "./services/systemNotification";
+import { pushErrorToast } from "./services/toasts";
 import { ReleaseNotesModal } from "./features/update/components/ReleaseNotesModal";
 import { requestVendorModelManager } from "./features/vendors/modelManagerRequest";
 import {
@@ -985,6 +990,30 @@ export function AppShell() {
   const alertError = useCallback((error: unknown) => {
     alert(error instanceof Error ? error.message : String(error));
   }, []);
+  const handleOpenDetachedFileExplorer = useCallback(
+    async (initialFilePath?: string | null) => {
+      if (!activeWorkspace) {
+        return;
+      }
+      try {
+        await openOrFocusDetachedFileExplorer(
+          buildDetachedFileExplorerSession({
+            workspaceId: activeWorkspace.id,
+            workspacePath: activeWorkspace.path,
+            workspaceName: activeWorkspace.name,
+            initialFilePath,
+          }),
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        pushErrorToast({
+          title: t("files.openDetachedExplorer"),
+          message,
+        });
+      }
+    },
+    [activeWorkspace, t],
+  );
   const {
     applyWorktreeChanges: handleApplyWorktreeChanges,
     revertAllGitChanges: handleRevertAllGitChanges,
@@ -2798,7 +2827,7 @@ export function AppShell() {
     handleCloseFileTab, handleCollaborationModeResolved, handleCommit, handleCommitAndPush, handleCommitAndSync, handleCommitMessageChange, handleCopyDebug, handleCopyThread,
     handleCreateBranch, handleCreatePrompt, handleDebugClick, handleDeletePrompt, handleDeleteQueued, handleDeleteThreadPromptCancel, handleDeleteThreadPromptConfirm, handleDraftChange,
     handleDropWorkspacePaths, handleEditQueued, handleEnsureWorkspaceThreadsForSettings, handleExitEditor, handleGenerateCommitMessage, handleGitIssuesChange, handleGitPanelModeChange, handleGitPullRequestCommentsChange,
-    handleGitPullRequestDiffsChange, handleGitPullRequestsChange, handleInsertComposerText, handleLockPanel, handleMovePrompt, handleOpenFile, handleOpenModelSettings, handleOpenRenameWorktree,
+    handleGitPullRequestDiffsChange, handleGitPullRequestsChange, handleInsertComposerText, handleLockPanel, handleMovePrompt, handleOpenDetachedFileExplorer, handleOpenFile, handleOpenModelSettings, handleOpenRenameWorktree,
     handlePickGitRoot, handlePointerMove, handlePointerUp, handlePush, handleRenamePromptCancel, handleRenamePromptChange, handleRenamePromptConfirm, handleRenameThread,
     handleRenameWorktreeCancel, handleRenameWorktreeChange, handleRenameWorktreeConfirm, handleResize, handleRevealGeneralPrompts, handleRevealWorkspacePrompts, handleRevertAllGitChanges, handleRevertGitFile,
     handleReviewPromptKeyDown, handleSelectAgent, handleSelectCommit, handleSelectDiff, handleSelectModel, handleSelectOpenAppId, handleSelectOpenCodeAgent, handleSelectOpenCodeVariant,

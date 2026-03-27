@@ -323,6 +323,7 @@ type LayoutNodesOptions = {
   onFilePanelModeChange: (mode: "git" | "files" | "search" | "prompts" | "memory" | "activity" | "radar") => void;
   fileTreeLoading: boolean;
   onRefreshFiles?: () => void;
+  onOpenDetachedFileExplorer?: (initialFilePath?: string | null) => void;
   onToggleRuntimeConsole: () => void;
   runtimeConsoleVisible: boolean;
   gitStatus: {
@@ -1325,6 +1326,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         isRuntimeConsoleVisible={options.runtimeConsoleVisible}
         onOpenSpecHub={options.onOpenSpecHub}
         isSpecHubActive={options.activeTab === "spec"}
+        onOpenDetachedExplorer={options.onOpenDetachedFileExplorer}
         gitStatusFiles={options.gitStatus.files}
         gitignoredFiles={options.gitignoredFiles}
         gitignoredDirectories={options.gitignoredDirectories}

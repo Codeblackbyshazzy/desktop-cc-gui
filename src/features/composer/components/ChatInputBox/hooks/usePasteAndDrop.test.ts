@@ -96,6 +96,8 @@ describe("usePasteAndDrop path insertion", () => {
     delete window.__fileTreeDragPaths;
     delete window.__fileTreeDragStamp;
     delete window.__fileTreeDragActive;
+    delete window.__fileTreeDragOverChat;
+    delete window.__fileTreeDragDropped;
   });
 
   it("inserts multi-path payload from custom drag data once", () => {

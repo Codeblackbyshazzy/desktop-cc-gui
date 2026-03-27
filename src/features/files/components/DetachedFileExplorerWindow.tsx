@@ -1,0 +1,168 @@
+import type { CSSProperties } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useTranslation } from "react-i18next";
+import { useAppSettingsController } from "../../app/hooks/useAppSettingsController";
+import { useCodeCssVars } from "../../app/hooks/useCodeCssVars";
+import { useWorkspaceFiles } from "../../workspaces/hooks/useWorkspaceFiles";
+import { useWindowFocusState } from "../../layout/hooks/useWindowFocusState";
+import { useOpenAppIcons } from "../../app/hooks/useOpenAppIcons";
+import { DEFAULT_OPEN_APP_ID, DEFAULT_OPEN_APP_TARGETS } from "../../app/constants";
+import { getClientStoreSync } from "../../../services/clientStorage";
+import type { WorkspaceInfo } from "../../../types";
+import { isMacPlatform, isWindowsPlatform } from "../../../utils/platform";
+import {
+  buildDetachedFileExplorerWindowTitle,
+} from "../detachedFileExplorer";
+import { useDetachedFileExplorerSession } from "../hooks/useDetachedFileExplorerSession";
+import { useDetachedFileExplorerState } from "../hooks/useDetachedFileExplorerState";
+import { FileExplorerWorkspace } from "./FileExplorerWorkspace";
+
+function buildDetachedWorkspaceInfo(session: {
+  workspaceId: string;
+  workspaceName: string;
+  workspacePath: string;
+}): WorkspaceInfo {
+  return {
+    id: session.workspaceId,
+    name: session.workspaceName,
+    path: session.workspacePath,
+    connected: true,
+    settings: {
+      sidebarCollapsed: false,
+    },
+  };
+}
+
+export function DetachedFileExplorerWindow() {
+  const { t } = useTranslation();
+  const { appSettings, reduceTransparency } = useAppSettingsController();
+  useCodeCssVars(appSettings);
+  const session = useDetachedFileExplorerSession();
+  const isFocused = useWindowFocusState();
+  const isMacDesktop = useMemo(() => isMacPlatform(), []);
+  const isWindowsDesktop = useMemo(() => isWindowsPlatform(), []);
+  const appClassName = useMemo(
+    () => `app layout-desktop${isWindowsDesktop ? " windows-desktop" : ""}${
+      isMacDesktop ? " macos-desktop" : ""
+    }${reduceTransparency ? " reduced-transparency" : ""}`,
+    [isMacDesktop, isWindowsDesktop, reduceTransparency],
+  );
+  const detachedWindowStyle = useMemo(
+    () => ({
+      "--ui-font-family": appSettings.uiFontFamily,
+      "--code-font-family": appSettings.codeFontFamily,
+      "--code-font-size": `${appSettings.codeFontSize}px`,
+    }) as CSSProperties,
+    [appSettings.codeFontFamily, appSettings.codeFontSize, appSettings.uiFontFamily],
+  );
+  const activeWorkspace = useMemo(
+    () => (session ? buildDetachedWorkspaceInfo(session) : null),
+    [session],
+  );
+  const {
+    files,
+    directories,
+    gitignoredFiles,
+    gitignoredDirectories,
+    isLoading,
+    refreshFiles,
+  } = useWorkspaceFiles({
+    activeWorkspace,
+    pollingEnabled: isFocused,
+  });
+  const {
+    openTabs,
+    activeFilePath,
+    navigationTarget,
+    openFile,
+    activateTab,
+    closeTab,
+    closeAllTabs,
+  } = useDetachedFileExplorerState(
+    session?.workspaceId ?? null,
+    session?.initialFilePath ?? null,
+    session?.updatedAt ?? null,
+  );
+  const [selectedOpenAppId, setSelectedOpenAppId] = useState(
+    () => getClientStoreSync<string>("app", "openWorkspaceApp") ?? DEFAULT_OPEN_APP_ID,
+  );
+  const openAppIconById = useOpenAppIcons(DEFAULT_OPEN_APP_TARGETS);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+    void getCurrentWindow()
+      .setTitle(buildDetachedFileExplorerWindowTitle(session))
+      .catch(() => {});
+  }, [session]);
+
+  useEffect(() => {
+    if (!session || !isFocused) {
+      return;
+    }
+    void refreshFiles();
+  }, [isFocused, refreshFiles, session]);
+
+  if (!session) {
+      return (
+      <div className={`${appClassName} detached-file-explorer-window`} style={detachedWindowStyle}>
+        {isMacDesktop ? (
+          <header className="detached-file-explorer-titlebar" data-tauri-drag-region="true">
+            <div className="detached-file-explorer-titlebar-copy">
+              <span className="detached-file-explorer-titlebar-label">
+                {t("files.detachedExplorerTitle")}
+              </span>
+            </div>
+          </header>
+        ) : null}
+        <div className="detached-file-explorer-unavailable">
+          <p className="detached-file-explorer-empty-title">
+            {t("files.detachedExplorerUnavailableTitle")}
+          </p>
+          <p className="detached-file-explorer-empty-body">
+            {t("files.detachedExplorerUnavailableBody")}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`${appClassName} detached-file-explorer-window`} style={detachedWindowStyle}>
+      {isMacDesktop ? (
+        <header className="detached-file-explorer-titlebar" data-tauri-drag-region="true">
+          <div className="detached-file-explorer-titlebar-copy">
+            <span className="detached-file-explorer-titlebar-label">
+              {t("files.detachedExplorerTitle")}
+            </span>
+            <strong className="detached-file-explorer-titlebar-title">{session.workspaceName}</strong>
+          </div>
+        </header>
+      ) : null}
+      <FileExplorerWorkspace
+        workspaceId={session.workspaceId}
+        workspaceName={session.workspaceName}
+        workspacePath={session.workspacePath}
+        files={files}
+        directories={directories}
+        isLoading={isLoading}
+        gitignoredFiles={gitignoredFiles}
+        gitignoredDirectories={gitignoredDirectories}
+        openTargets={DEFAULT_OPEN_APP_TARGETS}
+        openAppIconById={openAppIconById}
+        selectedOpenAppId={selectedOpenAppId}
+        onSelectOpenAppId={setSelectedOpenAppId}
+        openTabs={openTabs}
+        activeFilePath={activeFilePath}
+        navigationTarget={navigationTarget}
+        onOpenFile={openFile}
+        onActivateTab={activateTab}
+        onCloseTab={closeTab}
+        onCloseAllTabs={closeAllTabs}
+        onRefreshFiles={refreshFiles}
+      />
+    </div>
+  );
+}

@@ -14,12 +14,7 @@ import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { confirm } from "@tauri-apps/plugin-dialog";
-import FilePlus from "lucide-react/dist/esm/icons/file-plus";
-import FolderPlus from "lucide-react/dist/esm/icons/folder-plus";
-import LayoutDashboard from "lucide-react/dist/esm/icons/layout-dashboard";
 import Plus from "lucide-react/dist/esm/icons/plus";
-import SquareMinus from "lucide-react/dist/esm/icons/square-minus";
-import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import TreePine from "lucide-react/dist/esm/icons/tree-pine";
 import FileIcon from "../../../components/FileIcon";
 import type { PanelTabId } from "../../layout/components/PanelTabs";
@@ -34,6 +29,7 @@ import {
 import type { GitFileStatus, OpenAppTarget } from "../../../types";
 import { languageFromPath } from "../../../utils/syntax";
 import { FilePreviewPopover } from "./FilePreviewPopover";
+import { FileTreeRootActions } from "./FileTreeRootActions";
 
 type FileTreeNode = {
   name: string;
@@ -67,6 +63,9 @@ type FileTreePanelProps = {
   isRuntimeConsoleVisible?: boolean;
   onOpenSpecHub?: () => void;
   isSpecHubActive?: boolean;
+  onOpenDetachedExplorer?: (initialFilePath?: string | null) => void;
+  showSpecHubAction?: boolean;
+  showDetachedExplorerAction?: boolean;
   gitStatusFiles?: GitFileStatus[];
   gitignoredFiles?: Set<string>;
   gitignoredDirectories?: Set<string>;
@@ -127,7 +126,6 @@ const SPECIAL_BUILD_ARTIFACT_DIRECTORIES = new Set([
   ".tox",
   ".dart_tool",
 ]);
-
 function setFileTreeDragBridge(paths: string[]) {
   if (typeof window === "undefined") {
     return;
@@ -632,6 +630,9 @@ export function FileTreePanel({
   isRuntimeConsoleVisible: _isRuntimeConsoleVisible = false,
   onOpenSpecHub,
   isSpecHubActive = false,
+  onOpenDetachedExplorer,
+  showSpecHubAction = true,
+  showDetachedExplorerAction = true,
   gitStatusFiles,
   gitignoredFiles,
   gitignoredDirectories,
@@ -1452,6 +1453,7 @@ export function FileTreePanel({
     () => resolveParentFolderForNode(selectedNodePath, selectedNodeType),
     [resolveParentFolderForNode, selectedNodePath, selectedNodeType],
   );
+  const detachedInitialFilePath = selectedNodeType === "file" ? selectedNodePath : null;
   const orderedSelectedNodePaths = useMemo(
     () =>
       visibleTreePathOrder.filter((path) => path.length > 0 && selectedNodePaths.has(path)),
@@ -1801,61 +1803,27 @@ export function FileTreePanel({
               <span className="file-tree-name">{workspaceRootLabel}</span>
             </button>
           </div>
-          <div className="file-tree-root-actions">
-            <button
-              type="button"
-              className={`ghost icon-button file-tree-root-action${isSpecHubActive ? " is-active" : ""}`}
-              onClick={onOpenSpecHub}
-              disabled={!onOpenSpecHub}
-              aria-label={t("sidebar.specHub")}
-              title={t("sidebar.specHub")}
-            >
-              <LayoutDashboard aria-hidden />
-            </button>
-            <button
-              type="button"
-              className="ghost icon-button file-tree-root-action"
-              onClick={() => openNewFilePrompt(selectedParentFolder)}
-              aria-label={t("files.newFile")}
-              title={t("files.newFile")}
-            >
-              <FilePlus aria-hidden />
-            </button>
-            <button
-              type="button"
-              className="ghost icon-button file-tree-root-action"
-              onClick={() => openNewFolderPrompt(selectedParentFolder)}
-              aria-label={t("files.newFolder")}
-              title={t("files.newFolder")}
-            >
-              <FolderPlus aria-hidden />
-            </button>
-            <button
-              type="button"
-              className="ghost icon-button file-tree-root-action"
-              onClick={toggleAllFolders}
-              disabled={!hasFolders}
-              aria-label={allVisibleExpanded ? t("files.collapseAllFolders") : t("files.expandAllFolders")}
-              title={allVisibleExpanded ? t("files.collapseAllFolders") : t("files.expandAllFolders")}
-            >
-              <SquareMinus aria-hidden />
-            </button>
-            <button
-              type="button"
-              className="ghost icon-button file-tree-root-action file-tree-root-action-danger"
-              onClick={() => {
-                if (!canTrashSelectedNode || !selectedNodePath || !selectedNodeType) {
-                  return;
-                }
-                void trashItem(selectedNodePath, selectedNodeType === "folder");
-              }}
-              disabled={!canTrashSelectedNode}
-              aria-label={t("files.deleteItem")}
-              title={t("files.deleteItem")}
-            >
-              <Trash2 aria-hidden />
-            </button>
-          </div>
+          <FileTreeRootActions
+            allVisibleExpanded={allVisibleExpanded}
+            canTrashSelectedNode={canTrashSelectedNode}
+            hasFolders={hasFolders}
+            isSpecHubActive={isSpecHubActive}
+            selectedParentFolder={selectedParentFolder}
+            onOpenDetachedExplorer={onOpenDetachedExplorer}
+            detachedInitialFilePath={detachedInitialFilePath}
+            onOpenNewFile={(parentFolder) => openNewFilePrompt(parentFolder ?? "")}
+            onOpenNewFolder={(parentFolder) => openNewFolderPrompt(parentFolder ?? "")}
+            onToggleAllFolders={toggleAllFolders}
+            onTrashSelected={() => {
+              if (!canTrashSelectedNode || !selectedNodePath || !selectedNodeType) {
+                return;
+              }
+              void trashItem(selectedNodePath, selectedNodeType === "folder");
+            }}
+            onOpenSpecHub={onOpenSpecHub}
+            showSpecHubAction={showSpecHubAction}
+            showDetachedExplorerAction={showDetachedExplorerAction}
+          />
         </div>
       </div>
       <div className={`file-tree-list${isRootVisibleExpanded && nodes.length > 0 ? " has-root-guide" : ""}`}>

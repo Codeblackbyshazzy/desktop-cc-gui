@@ -151,6 +151,49 @@ function readCustomGeminiModels(): EngineModelInfo[] {
   }
 }
 
+function readCustomClaudeModels(): EngineModelInfo[] {
+  if (typeof window === "undefined" || !window.localStorage) {
+    return [];
+  }
+  try {
+    const raw = window.localStorage.getItem(PROVIDER_STORAGE_KEYS.CLAUDE_CUSTOM_MODELS);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    const models = validateCodexCustomModels(parsed);
+    return models.map((model) => ({
+      id: model.id,
+      displayName: model.label?.trim() || model.id,
+      description: model.description?.trim() ?? "",
+      isDefault: false,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function mergeClaudeModelsPreserveDefault(
+  engineModels: EngineModelInfo[],
+  customModels: EngineModelInfo[],
+): EngineModelInfo[] {
+  if (customModels.length === 0) {
+    return engineModels;
+  }
+  const engineDefaultIds = new Set(
+    engineModels.filter((model) => model.isDefault).map((model) => model.id),
+  );
+  const patchedCustomModels = customModels.map((model) => ({
+    ...model,
+    isDefault: engineDefaultIds.has(model.id),
+  }));
+  const customIds = new Set(patchedCustomModels.map((model) => model.id));
+  return [
+    ...patchedCustomModels,
+    ...engineModels.filter((model) => !customIds.has(model.id)),
+  ];
+}
+
 /**
  * Convert EngineModelInfo to ModelOption format for UI compatibility
  */
@@ -184,7 +227,7 @@ export function useEngineController({
   const [isDetecting, setIsDetecting] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [modelMapping, setModelMapping] = useState(getModelMapping);
-  const [geminiCustomModelsVersion, setGeminiCustomModelsVersion] = useState(0);
+  const [customModelsVersion, setCustomModelsVersion] = useState(0);
 
   // Track initialization
   const initRef = useRef(false);
@@ -428,7 +471,12 @@ export function useEngineController({
     if (activeEngine !== "claude") {
       return engineModels;
     }
-    return engineModels.map((model) => ({
+    const customClaudeModels = readCustomClaudeModels();
+    const mergedModels = mergeClaudeModelsPreserveDefault(
+      engineModels,
+      customClaudeModels,
+    );
+    return mergedModels.map((model) => ({
       ...model,
       displayName: applyMappingToDisplayName(
         model.displayName,
@@ -436,7 +484,7 @@ export function useEngineController({
         modelMapping,
       ),
     }));
-  }, [activeEngine, engineModels, geminiCustomModelsVersion, modelMapping]);
+  }, [activeEngine, engineModels, customModelsVersion, modelMapping]);
 
   /**
    * Convert engine models to ModelOption format for UI compatibility
@@ -449,8 +497,11 @@ export function useEngineController({
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === MODEL_STORAGE_KEYS.CLAUDE_MODEL_MAPPING) {
         setModelMapping(getModelMapping());
-      } else if (e.key === PROVIDER_STORAGE_KEYS.GEMINI_CUSTOM_MODELS) {
-        setGeminiCustomModelsVersion((value) => value + 1);
+      } else if (
+        e.key === PROVIDER_STORAGE_KEYS.GEMINI_CUSTOM_MODELS ||
+        e.key === PROVIDER_STORAGE_KEYS.CLAUDE_CUSTOM_MODELS
+      ) {
+        setCustomModelsVersion((value) => value + 1);
       }
     };
 
@@ -459,9 +510,10 @@ export function useEngineController({
       if (customEvent.detail?.key === MODEL_STORAGE_KEYS.CLAUDE_MODEL_MAPPING) {
         setModelMapping(getModelMapping());
       } else if (
-        customEvent.detail?.key === PROVIDER_STORAGE_KEYS.GEMINI_CUSTOM_MODELS
+        customEvent.detail?.key === PROVIDER_STORAGE_KEYS.GEMINI_CUSTOM_MODELS ||
+        customEvent.detail?.key === PROVIDER_STORAGE_KEYS.CLAUDE_CUSTOM_MODELS
       ) {
-        setGeminiCustomModelsVersion((value) => value + 1);
+        setCustomModelsVersion((value) => value + 1);
       }
     };
 

@@ -313,6 +313,20 @@ fn is_likely_legacy_claude_model_id(model: &str) -> bool {
     model.trim().to_ascii_lowercase().starts_with("claude-")
 }
 
+fn is_valid_claude_model_for_passthrough(model: &str) -> bool {
+    let trimmed = model.trim();
+    if trimmed.is_empty() || trimmed.len() > 128 {
+        return false;
+    }
+    trimmed.chars().all(|ch| {
+        ch.is_ascii_alphanumeric()
+            || matches!(
+                ch,
+                '-' | '_' | '.' | ':' | '/' | '[' | ']'
+            )
+    })
+}
+
 fn resolve_opencode_bin(config: Option<&EngineConfig>) -> String {
     if let Some(custom) = config.and_then(|c| c.bin_path.as_ref()) {
         return custom.clone();
@@ -2031,7 +2045,7 @@ pub async fn engine_send_message(
                 .map(|value| value.trim())
                 .filter(|value| !value.is_empty())
                 .and_then(|value| {
-                    if value.starts_with("claude-") {
+                    if is_valid_claude_model_for_passthrough(value) {
                         Some(value.to_string())
                     } else {
                         None
@@ -2605,7 +2619,7 @@ pub async fn engine_send_message_sync(
                 .map(|value| value.trim())
                 .filter(|value| !value.is_empty())
                 .and_then(|value| {
-                    if value.starts_with("claude-") {
+                    if is_valid_claude_model_for_passthrough(value) {
                         Some(value.to_string())
                     } else {
                         None

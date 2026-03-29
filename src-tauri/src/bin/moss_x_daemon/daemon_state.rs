@@ -2,6 +2,20 @@ use super::*;
 
 mod git;
 
+fn is_valid_claude_model_for_passthrough(model: &str) -> bool {
+    let trimmed = model.trim();
+    if trimmed.is_empty() || trimmed.len() > 128 {
+        return false;
+    }
+    trimmed.chars().all(|ch| {
+        ch.is_ascii_alphanumeric()
+            || matches!(
+                ch,
+                '-' | '_' | '.' | ':' | '/' | '[' | ']'
+            )
+    })
+}
+
 impl DaemonState {
     pub(super) fn load(config: &DaemonConfig, event_sink: DaemonEventSink) -> Self {
         let storage_path = config.data_dir.join("workspaces.json");
@@ -559,7 +573,7 @@ impl DaemonState {
                     .map(|value| value.trim())
                     .filter(|value| !value.is_empty())
                     .and_then(|value| {
-                        if value.starts_with("claude-") {
+                        if is_valid_claude_model_for_passthrough(value) {
                             Some(value.to_string())
                         } else {
                             None
@@ -1088,7 +1102,7 @@ impl DaemonState {
                     .map(|value| value.trim())
                     .filter(|value| !value.is_empty())
                     .and_then(|value| {
-                        if value.starts_with("claude-") {
+                        if is_valid_claude_model_for_passthrough(value) {
                             Some(value.to_string())
                         } else {
                             None

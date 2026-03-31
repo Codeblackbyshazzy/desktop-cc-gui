@@ -321,12 +321,16 @@ export function useEngineController({
           const commands = await getOpenCodeCommandsList(false);
           if (Array.isArray(commands) && commands.length > 0) {
             if (opencodeIndex >= 0) {
+              const existingStatus = statuses[opencodeIndex];
+              if (!existingStatus) {
+                return;
+              }
               statuses = [...statuses];
               statuses[opencodeIndex] = {
-                ...statuses[opencodeIndex],
+                ...existingStatus,
                 installed: true,
                 error: null,
-                version: statuses[opencodeIndex]?.version ?? "unknown",
+                version: existingStatus.version ?? "unknown",
               };
             }
           }

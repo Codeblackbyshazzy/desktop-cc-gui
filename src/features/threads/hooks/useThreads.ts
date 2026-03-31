@@ -409,7 +409,7 @@ export function resolvePendingThreadIdForSession({
     (thread) => (activeTurnIdByThread[thread.id] ?? null) !== null,
   );
   if (turnBoundPending.length === 1) {
-    return turnBoundPending[0].id;
+    return turnBoundPending[0]?.id ?? null;
   }
   if (turnBoundPending.length > 1) {
     return pickActivePending(turnBoundPending);
@@ -421,14 +421,14 @@ export function resolvePendingThreadIdForSession({
       && hasObservedItems(thread.id),
   );
   if (contentBoundPending.length === 1) {
-    return contentBoundPending[0].id;
+    return contentBoundPending[0]?.id ?? null;
   }
   if (contentBoundPending.length > 1) {
     return pickActivePending(contentBoundPending);
   }
 
   if (pendingThreads.length === 1) {
-    const onlyPendingId = pendingThreads[0].id;
+    const onlyPendingId = pendingThreads[0]?.id ?? "";
     return hasPendingAnchor(onlyPendingId) ? onlyPendingId : null;
   }
 
@@ -645,7 +645,7 @@ export function useThreads({
     const visited = new Set<string>();
     while (aliases[current] && !visited.has(current)) {
       visited.add(current);
-      current = aliases[current];
+      current = aliases[current] ?? current;
     }
     return current;
   }, []);

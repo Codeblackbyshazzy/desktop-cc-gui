@@ -100,7 +100,7 @@ function resolveImageMediaType(path: string): string {
 
 function fileNameFromPath(path: string): string {
   const parts = path.split(/[/\\]/).filter(Boolean);
-  return parts.length > 0 ? parts[parts.length - 1] : path;
+  return parts.length > 0 ? (parts[parts.length - 1] ?? path) : path;
 }
 
 function normalizeDragPosition(
@@ -687,6 +687,9 @@ export function usePasteAndDrop({
       let hasImage = false;
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
+        if (!item) {
+          continue;
+        }
 
         // Only process real image types (type starts with image/)
         if (item.type.startsWith('image/')) {
@@ -699,15 +702,15 @@ export function usePasteAndDrop({
             // Read image as Base64
             const reader = new FileReader();
             reader.onload = () => {
-              const base64 = (reader.result as string).split(',')[1];
+              const base64 = (reader.result as string).split(',')[1] ?? '';
               const mediaType = blob.type || item.type || 'image/png';
               const ext = (() => {
                 if (mediaType && mediaType.includes('/')) {
-                  return mediaType.split('/')[1];
+                  return mediaType.split('/')[1] ?? 'png';
                 }
                 const name = blob.name || '';
                 const m = name.match(/\.([a-zA-Z0-9]+)$/);
-                return m ? m[1] : 'png';
+                return m?.[1] ?? 'png';
               })();
               const attachment: Attachment = {
                 id: generateId(),
@@ -741,6 +744,9 @@ export function usePasteAndDrop({
           let hasFileItem = false;
           for (let i = 0; i < items.length; i++) {
             const item = items[i];
+            if (!item) {
+              continue;
+            }
             if (item.kind === 'file') {
               hasFileItem = true;
               break;
@@ -865,6 +871,9 @@ export function usePasteAndDrop({
       if (files && files.length > 0) {
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
+          if (!file) {
+            continue;
+          }
           const fileLooksLikeImage =
             file.type.startsWith("image/") || isImagePath(file.name);
 
@@ -873,13 +882,13 @@ export function usePasteAndDrop({
             hasImageFile = true;
             const reader = new FileReader();
             reader.onload = () => {
-              const base64 = (reader.result as string).split(',')[1];
+              const base64 = (reader.result as string).split(',')[1] ?? '';
               const ext = (() => {
                 if (file.type && file.type.includes('/')) {
-                  return file.type.split('/')[1];
+                  return file.type.split('/')[1] ?? 'png';
                 }
                 const m = file.name.match(/\.([a-zA-Z0-9]+)$/);
-                return m ? m[1] : 'png';
+                return m?.[1] ?? 'png';
               })();
               const attachment: Attachment = {
                 id: generateId(),

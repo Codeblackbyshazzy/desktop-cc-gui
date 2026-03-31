@@ -255,6 +255,9 @@ describe("GitDiffPanel", () => {
     );
 
     const flatButton = screen.getAllByRole("button", { name: "Flat" })[0];
+    if (!flatButton) {
+      throw new Error("Flat button not found");
+    }
     flatButton.focus();
     fireEvent.keyDown(window, { key: "V", altKey: true, shiftKey: true });
     expect(onGitDiffListViewChange).toHaveBeenCalledWith("tree");
@@ -277,6 +280,9 @@ describe("GitDiffPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Toggle commit section" }));
     const textarea = screen.getAllByPlaceholderText("Commit message...")[0];
+    if (!textarea) {
+      throw new Error("Commit textarea not found");
+    }
     textarea.focus();
     fireEvent.keyDown(textarea, { key: "V", altKey: true, shiftKey: true });
     expect(onGitDiffListViewChange).not.toHaveBeenCalled();

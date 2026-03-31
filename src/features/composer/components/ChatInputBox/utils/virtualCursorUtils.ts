@@ -74,6 +74,9 @@ export function getVirtualCursorPosition(element: HTMLElement): number {
           const children = Array.from(el.childNodes);
           for (let i = 0; i < range.endOffset && i < children.length; i++) {
             const child = children[i];
+            if (!child) {
+              continue;
+            }
             if (child.nodeType === Node.TEXT_NODE) {
               position += child.textContent?.length || 0;
             } else if (child.nodeType === Node.ELEMENT_NODE) {
@@ -115,6 +118,9 @@ export function getVirtualCursorPosition(element: HTMLElement): number {
           const children = Array.from(el.childNodes);
           for (let i = 0; i < range.endOffset && i < children.length; i++) {
             const child = children[i];
+            if (!child) {
+              continue;
+            }
             if (child.nodeType === Node.TEXT_NODE) {
               position += child.textContent?.length || 0;
             } else if (child.nodeType === Node.ELEMENT_NODE) {

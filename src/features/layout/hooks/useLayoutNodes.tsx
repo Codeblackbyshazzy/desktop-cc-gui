@@ -693,7 +693,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         activeWorkspacePath,
       );
       onGitDiffListViewChange("tree");
-      onSelectDiff(resolvedPath);
+      onSelectDiff(resolvedPath ?? null);
     },
     [gitDiffItems, activeWorkspacePath, onGitDiffListViewChange, onSelectDiff],
   );

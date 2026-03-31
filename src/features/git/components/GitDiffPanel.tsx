@@ -395,7 +395,7 @@ function DiffFileRow({
 }: DiffFileRowProps) {
   const { t } = useTranslation();
   const { name, dir } = splitPath(file.path);
-  const { base, extension } = splitNameAndExtension(name);
+  const { base, extension } = splitNameAndExtension(name ?? "");
   const statusSymbol = getStatusSymbol(file.status);
   const statusClass = getStatusClass(file.status);
   const showStage = section === "unstaged" && Boolean(onStageFile);
@@ -714,7 +714,7 @@ export function buildDiffTree(
     const parts = file.path.split("/");
     let node = root;
     for (let index = 0; index < parts.length - 1; index += 1) {
-      const segment = parts[index];
+      const segment = parts[index] ?? "";
       const nextKey = `${node.key}${segment}/`;
       let child = node.folders.get(segment);
       if (!child) {
@@ -725,6 +725,9 @@ export function buildDiffTree(
           files: [],
         };
         node.folders.set(segment, child);
+      }
+      if (!child) {
+        break;
       }
       node = child;
     }
@@ -816,6 +819,9 @@ function DiffTreeSection({
     }
     for (let index = currentIndex - 1; index >= 0; index -= 1) {
       const candidate = nodes[index];
+      if (!candidate) {
+        continue;
+      }
       const candidateDepth = Number(candidate.dataset.treeDepth ?? "0");
       if (!Number.isFinite(candidateDepth)) {
         continue;
@@ -1426,7 +1432,13 @@ export function GitDiffPanel({
     [t],
   );
   const currentModeOption = useMemo(
-    () => modeOptions.find((option) => option.value === mode) ?? modeOptions[0],
+    () =>
+      modeOptions.find((option) => option.value === mode) ??
+      modeOptions[0] ?? {
+        value: "diff" as const,
+        label: t("git.changesMode"),
+        description: t("git.changesModeDescription"),
+      },
     [mode, modeOptions],
   );
 

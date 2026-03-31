@@ -35,7 +35,7 @@ function readRealtimePerfFlag(
   const fallbackValue = isTestMode ? testDefaultValue : defaultValue;
 
   if (!isTestMode && key in cachedFlags) {
-    return cachedFlags[key];
+    return cachedFlags[key] ?? fallbackValue;
   }
 
   let resolved = fallbackValue;

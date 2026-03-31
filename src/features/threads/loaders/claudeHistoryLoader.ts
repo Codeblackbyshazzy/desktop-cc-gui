@@ -513,7 +513,7 @@ function mergeReasoningSnapshot(
   );
   if (byIdIndex >= 0) {
     const existing = items[byIdIndex];
-    if (existing.kind === "reasoning") {
+    if (existing?.kind === "reasoning") {
       const nextText = preferLongerReasoningText(existing.content, normalizedText);
       items[byIdIndex] = {
         ...existing,
@@ -525,10 +525,10 @@ function mergeReasoningSnapshot(
   }
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const candidate = items[index];
-    if (candidate.kind === "message" && candidate.role === "user") {
+    if (candidate?.kind === "message" && candidate.role === "user") {
       break;
     }
-    if (candidate.kind !== "reasoning") {
+    if (candidate?.kind !== "reasoning") {
       continue;
     }
     if (!isReasoningSnapshotDuplicate(candidate.content, normalizedText)) {

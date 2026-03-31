@@ -266,7 +266,7 @@ export function parseReviewTarget(input: string): ReviewTarget {
     const title = titleParts.join(" ").trim();
     return {
       type: "commit",
-      sha,
+      sha: sha ?? "",
       ...(title ? { title } : {}),
     };
   }

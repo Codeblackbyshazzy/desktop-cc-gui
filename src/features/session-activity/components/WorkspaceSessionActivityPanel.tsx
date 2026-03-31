@@ -416,11 +416,13 @@ function resolveSessionPillStyle(
   index: number,
 ): CSSProperties & Record<string, string> {
   const hashSeed = resolveStringHash(`${session.threadId}:${session.threadName}:${index}`);
-  const paletteEntry = SESSION_PILL_COLOR_PALETTE[hashSeed % SESSION_PILL_COLOR_PALETTE.length];
+  const paletteEntry =
+    SESSION_PILL_COLOR_PALETTE[hashSeed % SESSION_PILL_COLOR_PALETTE.length] ??
+    SESSION_PILL_COLOR_PALETTE[0];
   return {
-    "--session-pill-accent-h": `${paletteEntry.hue}`,
-    "--session-pill-accent-s": `${paletteEntry.saturation}%`,
-    "--session-pill-accent-l": `${paletteEntry.lightness}%`,
+    "--session-pill-accent-h": `${paletteEntry?.hue ?? 214}`,
+    "--session-pill-accent-s": `${paletteEntry?.saturation ?? 72}%`,
+    "--session-pill-accent-l": `${paletteEntry?.lightness ?? 54}%`,
   };
 }
 
@@ -771,6 +773,9 @@ export function WorkspaceSessionActivityPanel({
       const next: Record<string, StickyChildSessionSummary> = { ...current };
       for (let index = 0; index < relatedSessionSummaries.length; index += 1) {
         const session = relatedSessionSummaries[index];
+        if (!session) {
+          continue;
+        }
         const existing = current[session.threadId];
         const candidate: StickyChildSessionSummary = {
           ...session,

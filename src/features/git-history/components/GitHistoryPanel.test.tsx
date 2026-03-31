@@ -410,11 +410,11 @@ describe("GitHistoryPanel interactions", () => {
       expect(screen.getByText("git.pull")).toBeTruthy();
     });
 
-    fireEvent.click(screen.getAllByText("git.pull")[0]);
+    fireEvent.click(screen.getAllByText("git.pull")[0]!);
     expect(screen.getByRole("dialog", { name: "git.historyPullDialogTitle" })).toBeTruthy();
     expect(tauriService.pullGit).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getAllByText("git.pull")[1]);
+    fireEvent.click(screen.getAllByText("git.pull")[1]!);
 
     await waitFor(() => {
       expect(tauriService.pullGit).toHaveBeenCalledWith(
@@ -434,11 +434,11 @@ describe("GitHistoryPanel interactions", () => {
       expect(screen.getByText("git.sync")).toBeTruthy();
     });
 
-    fireEvent.click(screen.getAllByText("git.sync")[0]);
+    fireEvent.click(screen.getAllByText("git.sync")[0]!);
     expect(screen.getByRole("dialog", { name: "git.historySyncDialogTitle" })).toBeTruthy();
     expect(tauriService.syncGit).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getAllByText("git.sync")[1]);
+    fireEvent.click(screen.getAllByText("git.sync")[1]!);
 
     await waitFor(() => {
       expect(tauriService.syncGit).toHaveBeenCalledWith("w1");
@@ -452,11 +452,11 @@ describe("GitHistoryPanel interactions", () => {
       expect(screen.getByText("git.fetch")).toBeTruthy();
     });
 
-    fireEvent.click(screen.getAllByText("git.fetch")[0]);
+    fireEvent.click(screen.getAllByText("git.fetch")[0]!);
     expect(screen.getByRole("dialog", { name: "git.historyFetchDialogTitle" })).toBeTruthy();
     expect(tauriService.fetchGit).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getAllByText("git.fetch")[1]);
+    fireEvent.click(screen.getAllByText("git.fetch")[1]!);
 
     await waitFor(() => {
       expect(tauriService.fetchGit).toHaveBeenCalledWith("w1");
@@ -474,7 +474,7 @@ describe("GitHistoryPanel interactions", () => {
     fireEvent.click(screen.getByText("git.refresh"));
     expect(screen.getByRole("dialog", { name: "git.historyRefreshDialogTitle" })).toBeTruthy();
 
-    fireEvent.click(screen.getAllByText("git.refresh")[1]);
+    fireEvent.click(screen.getAllByText("git.refresh")[1]!);
 
     await waitFor(() => {
       expect(vi.mocked(tauriService.getGitCommitHistory).mock.calls.length).toBeGreaterThan(beforeCount);
@@ -488,7 +488,7 @@ describe("GitHistoryPanel interactions", () => {
       expect(screen.getByText("git.fetch")).toBeTruthy();
     });
 
-    fireEvent.click(screen.getAllByText("git.fetch")[0]);
+    fireEvent.click(screen.getAllByText("git.fetch")[0]!);
     expect(screen.getByText("git.historyIntentTitle")).toBeTruthy();
     expect(screen.getByText("git.historyWillHappenTitle")).toBeTruthy();
     expect(screen.getByText("git.historyWillNotHappenTitle")).toBeTruthy();
@@ -504,7 +504,7 @@ describe("GitHistoryPanel interactions", () => {
       expect(screen.getByText("git.sync")).toBeTruthy();
     });
 
-    fireEvent.click(screen.getAllByText("git.sync")[0]);
+    fireEvent.click(screen.getAllByText("git.sync")[0]!);
     await waitFor(() => {
       expect(screen.getByText("git.historySyncDialogAheadBehind")).toBeTruthy();
       expect(screen.getByText("feat: one")).toBeTruthy();
@@ -1213,7 +1213,7 @@ describe("GitHistoryPanel interactions", () => {
       expect(screen.getByText("feat: one")).toBeTruthy();
     });
 
-    fireEvent.click(screen.getAllByText("git.pull")[0]);
+    fireEvent.click(screen.getAllByText("git.pull")[0]!);
     fireEvent.click(screen.getByLabelText("git.historyPullDialogTargetBranchLabel toggle"));
 
     await waitFor(() => {

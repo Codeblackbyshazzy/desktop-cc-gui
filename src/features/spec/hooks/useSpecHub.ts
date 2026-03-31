@@ -1255,6 +1255,9 @@ export function useSpecHub({ workspaceId, files, directories }: UseSpecHubOption
           } catch (writebackError) {
             for (let index = toggledTaskIndices.length - 1; index >= 0; index -= 1) {
               const taskIndex = toggledTaskIndices[index];
+              if (taskIndex === undefined) {
+                continue;
+              }
               try {
                 const reverted = await updateSpecTaskChecklist({
                   workspaceId,

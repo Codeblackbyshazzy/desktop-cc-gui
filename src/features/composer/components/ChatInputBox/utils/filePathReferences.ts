@@ -29,7 +29,7 @@ export function normalizePathForComparison(path: string): string {
   let normalized = trimmed.replace(/\\/g, "/");
   const driveMatch = normalized.match(/^([a-zA-Z]):(\/|$)/);
   if (driveMatch) {
-    normalized = `${driveMatch[1].toLowerCase()}:${normalized.slice(2)}`;
+    normalized = `${(driveMatch[1] ?? "").toLowerCase()}:${normalized.slice(2)}`;
   }
   return normalized;
 }

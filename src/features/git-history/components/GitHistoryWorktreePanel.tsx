@@ -132,7 +132,7 @@ function buildDiffTree(files: GitFileStatus[], section: DiffSection): DiffTreeNo
     const parts = file.path.split("/").filter(Boolean);
     let node = root;
     for (let index = 0; index < parts.length - 1; index += 1) {
-      const segment = parts[index];
+      const segment = parts[index] ?? "";
       const key = `${node.key}${segment}/`;
       let child = node.folders.get(segment);
       if (!child) {

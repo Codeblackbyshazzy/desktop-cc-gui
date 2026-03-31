@@ -1,4 +1,16 @@
 import type { ConversationItem } from "../../../types";
+
+function isUserMessageItem(
+  item: ConversationItem | undefined,
+): item is Extract<ConversationItem, { kind: "message"; role: "user" }> {
+  return item?.kind === "message" && item.role === "user";
+}
+
+function isReasoningItem(
+  item: ConversationItem | undefined,
+): item is Extract<ConversationItem, { kind: "reasoning" }> {
+  return item?.kind === "reasoning";
+}
 import { normalizeItem } from "../../../utils/threadItems";
 import {
   isClaudeReasoningThread,
@@ -78,7 +90,7 @@ function extractReasoningBlockquoteText(paragraph: string) {
     if (!match) {
       return null;
     }
-    const content = match[1].trim();
+    const content = (match[1] ?? "").trim();
     if (!content || looksLikeMarkdownBlockStart(content)) {
       return null;
     }
@@ -260,7 +272,8 @@ function dedupeRepeatedReasoningSentences(value: string) {
   const sliceByCompactLength = (text: string, targetCompactLength: number) => {
     let compactLength = 0;
     for (let index = 0; index < text.length; index += 1) {
-      if (!/\s/.test(text[index])) {
+      const currentChar = text[index] ?? "";
+      if (!/\s/.test(currentChar)) {
         compactLength += 1;
       }
       if (compactLength >= targetCompactLength) {
@@ -387,10 +400,10 @@ export function findDuplicateReasoningSnapshotIndex(
   }
   for (let index = list.length - 1; index >= 0; index -= 1) {
     const candidate = list[index];
-    if (candidate.kind === "message" && candidate.role === "user") {
+    if (isUserMessageItem(candidate)) {
       break;
     }
-    if (candidate.kind !== "reasoning") {
+    if (!isReasoningItem(candidate)) {
       continue;
     }
     const candidateText = normalizeReasoningReadableText(
@@ -429,7 +442,8 @@ function sliceByCompactStreamingLength(value: string, compactLength: number) {
   }
   let count = 0;
   for (let index = 0; index < value.length; index += 1) {
-    if (!/\s/.test(value[index])) {
+    const currentChar = value[index] ?? "";
+    if (!/\s/.test(currentChar)) {
       count += 1;
     }
     if (count >= compactLength) {
@@ -445,12 +459,13 @@ function takeByCompactStreamingLength(value: string, compactLength: number) {
   }
   let count = 0;
   for (let index = 0; index < value.length; index += 1) {
-    if (!/\s/.test(value[index])) {
+    const currentChar = value[index] ?? "";
+    if (!/\s/.test(currentChar)) {
       count += 1;
     }
     if (count >= compactLength) {
       let end = index + 1;
-      while (end < value.length && /\s/.test(value[end])) {
+      while (end < value.length && /\s/.test(value[end] ?? "")) {
         end += 1;
       }
       return value.slice(0, end);

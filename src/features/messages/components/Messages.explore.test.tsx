@@ -255,6 +255,9 @@ describe("Messages explore rows", () => {
     expect(exploreBlocks.length).toBe(2);
     expect(reasoningDetail).toBeTruthy();
     const [firstExploreBlock, secondExploreBlock] = exploreBlocks;
+    if (!firstExploreBlock || !secondExploreBlock) {
+      throw new Error("Explore blocks not found");
+    }
     const firstBeforeReasoning =
       firstExploreBlock.compareDocumentPosition(reasoningDetail as Node) &
       Node.DOCUMENT_POSITION_FOLLOWING;

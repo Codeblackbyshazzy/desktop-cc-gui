@@ -77,7 +77,7 @@ function extractLanguageTag(className?: string) {
   if (!match) {
     return null;
   }
-  return match[1];
+  return match[1] ?? null;
 }
 
 function extractCodeFromPre(node?: PreProps["node"]) {
@@ -146,23 +146,23 @@ function normalizeListIndentation(value: string) {
       return line;
     }
 
-    const orderedMatch = line.match(/^(\s*)(\d+)\.(\s*)(.*)$/);
-    const orderedContent = orderedMatch?.[4] ?? "";
-    const orderedHasWhitespace = (orderedMatch?.[3].length ?? 0) > 0;
+  const orderedMatch = line.match(/^(\s*)(\d+)\.(\s*)(.*)$/);
+  const orderedContent = orderedMatch?.[4] ?? "";
+  const orderedHasWhitespace = ((orderedMatch?.[3] ?? "").length ?? 0) > 0;
     const orderedLooksDecimal =
       Boolean(orderedContent) &&
       !orderedHasWhitespace &&
       /^\d/.test(orderedContent);
     if (orderedMatch && !orderedLooksDecimal) {
-      const rawIndent = orderedMatch[1].length;
+      const rawIndent = (orderedMatch[1] ?? "").length;
       const normalizedIndent = rawIndent;
       activeOrderedItem = true;
       orderedBaseIndent = normalizedIndent + 4;
       orderedIndentOffset = null;
       const normalizedBody = orderedContent.trimStart();
       const normalizedLine = normalizedBody
-        ? `${spaces(normalizedIndent)}${orderedMatch[2]}. ${normalizedBody}`
-        : `${spaces(normalizedIndent)}${orderedMatch[2]}.`;
+        ? `${spaces(normalizedIndent)}${orderedMatch[2] ?? ""}. ${normalizedBody}`
+        : `${spaces(normalizedIndent)}${orderedMatch[2] ?? ""}.`;
       if (normalizedIndent !== rawIndent || normalizedLine !== line) {
         return normalizedLine;
       }
@@ -171,7 +171,7 @@ function normalizeListIndentation(value: string) {
 
     const bulletMatch = line.match(/^(\s*)([-*+])\s+/);
     if (bulletMatch) {
-      const rawIndent = bulletMatch[1].length;
+      const rawIndent = (bulletMatch[1] ?? "").length;
       let targetIndent = rawIndent;
 
       if (activeOrderedItem) {
@@ -259,7 +259,7 @@ function extractBlockquoteParagraphText(paragraph: string) {
     if (!match) {
       return null;
     }
-    const content = match[1].trim();
+    const content = (match[1] ?? "").trim();
     if (!content || startsWithMarkdownBlockSyntax(content)) {
       return null;
     }
@@ -795,7 +795,7 @@ function extractMermaidContent(languageTag: string | null, value: string): strin
   // Case 2: fenced marker leaked into the content (e.g. ```mermaid\n...\n```)
   const fencedMatch = value.match(/^```mermaid\s*\n([\s\S]*?)(?:\n```\s*)?$/);
   if (fencedMatch) {
-    const inner = fencedMatch[1].trim();
+    const inner = (fencedMatch[1] ?? "").trim();
     if (inner) return inner;
   }
   return null;
@@ -824,7 +824,7 @@ function PreBlock({ node, children, copyUseModifier }: PreProps) {
     return <LinkBlock urls={urlLines} />;
   }
   const languageTag = extractLanguageTag(className);
-  const mermaidContent = extractMermaidContent(languageTag, value);
+  const mermaidContent = extractMermaidContent(languageTag, value ?? "");
   if (mermaidContent) {
     return (
       <Suspense fallback={<MermaidFallback />}>

@@ -244,7 +244,7 @@ export function TaskCreateModal({
       setFormError(null);
       inlineCompletion.clear();
       if (availableEngines.length > 0 && !availableEngines.find((e) => e.engineType === engineType)) {
-        setEngineType(availableEngines[0].engineType);
+        setEngineType(availableEngines[0]?.engineType ?? "codex");
       }
       setTimeout(() => titleRef.current?.focus(), 50);
     }
@@ -254,7 +254,7 @@ export function TaskCreateModal({
     const engine = engineStatuses.find((e) => e.engineType === engineType);
     if (engine?.models.length) {
       const defaultModel = engine.models.find((m) => m.isDefault);
-      setModelId(defaultModel?.id ?? engine.models[0].id);
+      setModelId(defaultModel?.id ?? engine.models[0]?.id ?? null);
     } else {
       setModelId(null);
     }

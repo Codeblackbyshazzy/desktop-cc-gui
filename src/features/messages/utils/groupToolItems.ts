@@ -24,6 +24,14 @@ export type GroupedEntry =
 function mergeExploreItems(items: ExploreItem[]): ExploreItem {
   const first = items[0];
   const last = items[items.length - 1];
+  if (!first) {
+    return {
+      id: "explore-group-empty",
+      kind: "explore",
+      status: "explored",
+      entries: [],
+    };
+  }
   return {
     id: first.id,
     kind: 'explore',
@@ -84,7 +92,10 @@ export function groupToolItems(items: ConversationItem[]): GroupedEntry[] {
   const flushExplores = () => {
     if (exploreBuffer.length === 0) return;
     if (exploreBuffer.length === 1) {
-      entries.push({ kind: 'item', item: exploreBuffer[0] });
+      const firstExplore = exploreBuffer[0];
+      if (firstExplore) {
+        entries.push({ kind: 'item', item: firstExplore });
+      }
     } else {
       entries.push({ kind: 'item', item: mergeExploreItems(exploreBuffer) });
     }

@@ -9,6 +9,9 @@ export function findReasoningIndexById(
   }
   for (let index = list.length - 1; index >= 0; index -= 1) {
     const item = list[index];
+    if (!item) {
+      continue;
+    }
     if (item.kind === "reasoning" && item.id === candidateId) {
       return index;
     }
@@ -36,7 +39,7 @@ export function findAssistantMessageIndexByLegacyTextDelta(
   for (let index = list.length - 1; index >= 0; index -= 1) {
     const item = list[index];
     if (
-      item.kind === "message" &&
+      item?.kind === "message" &&
       item.role === "assistant" &&
       (item.id === legacyId || item.id.startsWith(`${legacyId}-seg-`))
     ) {
@@ -50,7 +53,7 @@ export function findGeminiReasoningInsertIndex(list: ConversationItem[]) {
   let lastUserMessageIndex = -1;
   for (let index = list.length - 1; index >= 0; index -= 1) {
     const item = list[index];
-    if (item.kind === "message" && item.role === "user") {
+    if (item?.kind === "message" && item.role === "user") {
       lastUserMessageIndex = index;
       break;
     }
@@ -59,7 +62,7 @@ export function findGeminiReasoningInsertIndex(list: ConversationItem[]) {
   const scanStart = lastUserMessageIndex >= 0 ? lastUserMessageIndex + 1 : 0;
   for (let index = scanStart; index < list.length; index += 1) {
     const item = list[index];
-    if (item.kind === "message" && item.role === "assistant") {
+    if (item?.kind === "message" && item.role === "assistant") {
       return index;
     }
   }

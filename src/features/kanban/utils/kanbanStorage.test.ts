@@ -48,9 +48,9 @@ describe("kanbanStorage compatibility", () => {
 
     const data = loadKanbanData();
     expect(data.tasks).toHaveLength(1);
-    expect(data.tasks[0].schedule).toBeUndefined();
-    expect(data.tasks[0].chain).toBeUndefined();
-    expect(data.tasks[0].execution).toBeUndefined();
+    expect(data.tasks[0]?.schedule).toBeUndefined();
+    expect(data.tasks[0]?.chain).toBeUndefined();
+    expect(data.tasks[0]?.execution).toBeUndefined();
   });
 
   it("normalizes execution startedAt/finishedAt from persisted tasks", () => {
@@ -98,8 +98,8 @@ describe("kanbanStorage compatibility", () => {
 
     const data = loadKanbanData();
     expect(data.tasks).toHaveLength(1);
-    expect(data.tasks[0].execution?.startedAt).toBe(1000);
-    expect(data.tasks[0].execution?.finishedAt).toBe(2000);
-    expect(data.tasks[0].chain?.groupCode).toBe("128");
+    expect(data.tasks[0]?.execution?.startedAt).toBe(1000);
+    expect(data.tasks[0]?.execution?.finishedAt).toBe(2000);
+    expect(data.tasks[0]?.chain?.groupCode).toBe("128");
   });
 });

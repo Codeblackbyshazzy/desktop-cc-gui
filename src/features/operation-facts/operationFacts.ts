@@ -281,6 +281,9 @@ function extractLikelyPathFromTitle(title: string): string {
     .filter(Boolean);
   for (let index = tokens.length - 1; index >= 0; index -= 1) {
     const token = tokens[index];
+    if (!token) {
+      continue;
+    }
     if (
       token.includes("/") ||
       token.includes("\\") ||

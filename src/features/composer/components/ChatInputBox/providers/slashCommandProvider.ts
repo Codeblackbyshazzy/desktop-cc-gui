@@ -218,7 +218,7 @@ function isHiddenCommand(name: string): boolean {
   if (HIDDEN_COMMANDS.has(normalized)) return true;
   // Hide SDK-returned /clear (use local version instead)
   if (NEW_SESSION_COMMAND_ALIASES.has(normalized)) return true;
-  const baseName = normalized.split(' ')[0];
+  const baseName = normalized.split(' ')[0] ?? normalized;
   return HIDDEN_COMMANDS.has(baseName) || NEW_SESSION_COMMAND_ALIASES.has(baseName);
 }
 

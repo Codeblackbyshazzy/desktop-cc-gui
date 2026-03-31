@@ -237,6 +237,34 @@ const AGENT_PROMPT_NAME_LINE_REGEX =
 const MESSAGES_PERF_DEBUG_FLAG_KEY = "mossx.debug.messages.perf";
 const CLAUDE_HIDE_REASONING_MODULE_FLAG_KEY = "mossx.claude.hideReasoningModule";
 const CLAUDE_RENDER_DEBUG_FLAG_KEY = "mossx.debug.claude.render";
+
+type MessageConversationItem = Extract<ConversationItem, { kind: "message" }>;
+type ReasoningConversationItem = Extract<ConversationItem, { kind: "reasoning" }>;
+
+function isMessageConversationItem(
+  item: ConversationItem | undefined,
+): item is MessageConversationItem {
+  return item?.kind === "message";
+}
+
+function isUserMessageConversationItem(
+  item: ConversationItem | undefined,
+): item is MessageConversationItem & { role: "user" } {
+  return item?.kind === "message" && item.role === "user";
+}
+
+function isAssistantMessageConversationItem(
+  item: ConversationItem | undefined,
+): item is MessageConversationItem & { role: "assistant" } {
+  return item?.kind === "message" && item.role === "assistant";
+}
+
+function isReasoningConversationItem(
+  item: ConversationItem | undefined,
+): item is ReasoningConversationItem {
+  return item?.kind === "reasoning";
+}
+
 const MESSAGES_SLOW_RENDER_WARN_MS = 18;
 const MESSAGES_SLOW_ANCHOR_WARN_MS = 8;
 const VISIBLE_MESSAGE_WINDOW = 30;
@@ -322,6 +350,9 @@ function extractLatestUserInputTextPreserveFormatting(text: string): string {
     return text;
   }
   const lastMatch = userInputMatches[userInputMatches.length - 1];
+  if (!lastMatch) {
+    return text;
+  }
   const markerIndex = lastMatch.index ?? -1;
   if (markerIndex < 0) {
     return text;
@@ -456,7 +487,8 @@ function sliceByComparableLength(text: string, targetLength: number) {
   }
   let compactLength = 0;
   for (let index = 0; index < text.length; index += 1) {
-    if (!/\s/.test(text[index])) {
+    const currentChar = text[index] ?? "";
+    if (!/\s/.test(currentChar)) {
       compactLength += 1;
     }
     if (compactLength >= targetLength) {
@@ -548,7 +580,8 @@ function dedupeAdjacentReasoningParagraphs(value: string) {
       if (`${half}${half}` === compact) {
         let compactLength = 0;
         for (let index = 0; index < trimmed.length; index += 1) {
-          if (!/\s/.test(trimmed[index])) {
+          const currentChar = trimmed[index] ?? "";
+          if (!/\s/.test(currentChar)) {
             compactLength += 1;
           }
           if (compactLength >= half.length) {
@@ -641,7 +674,7 @@ function parseReasoning(item: Extract<ConversationItem, { kind: "reasoning" }>) 
   const titleLines = titleSource.split("\n");
   const trimmedLines = titleLines.map((line) => line.trim());
   const titleLineIndex = trimmedLines.findIndex(Boolean);
-  const rawTitle = titleLineIndex >= 0 ? trimmedLines[titleLineIndex] : "";
+  const rawTitle = titleLineIndex >= 0 ? (trimmedLines[titleLineIndex] ?? "") : "";
   const cleanTitle = sanitizeReasoningTitle(rawTitle);
   const summaryTitle = cleanTitle
     ? cleanTitle.length > 80
@@ -843,7 +876,11 @@ function collapseConsecutiveReasoningRuns(
   let index = 0;
   while (index < list.length) {
     const item = list[index];
-    if (item.kind !== "reasoning") {
+    if (!item) {
+      index += 1;
+      continue;
+    }
+    if (!isReasoningConversationItem(item)) {
       collapsed.push(item);
       index += 1;
       continue;
@@ -855,11 +892,14 @@ function collapseConsecutiveReasoningRuns(
     }
 
     let end = index + 1;
-    while (
-      end < list.length &&
-      list[end].kind === "reasoning" &&
-      !isExplicitReasoningSegmentId(list[end].id)
-    ) {
+    while (end < list.length) {
+      const candidate = list[end];
+      if (
+        !isReasoningConversationItem(candidate) ||
+        isExplicitReasoningSegmentId(candidate.id)
+      ) {
+        break;
+      }
       end += 1;
     }
 
@@ -871,10 +911,18 @@ function collapseConsecutiveReasoningRuns(
 
     const run = list.slice(index, end) as Array<Extract<ConversationItem, { kind: "reasoning" }>>;
     const latest = run[run.length - 1];
-    let mergedSummary = run[0].summary;
-    let mergedContent = run[0].content;
+    const first = run[0];
+    if (!first || !latest) {
+      index = end;
+      continue;
+    }
+    let mergedSummary = first.summary;
+    let mergedContent = first.content;
     for (let runIndex = 1; runIndex < run.length; runIndex += 1) {
       const candidate = run[runIndex];
+      if (!candidate) {
+        continue;
+      }
       mergedSummary = mergeReasoningRunText(
         mergedSummary,
         candidate.summary,
@@ -1188,6 +1236,9 @@ function scrollKeyForItems(items: ConversationItem[]) {
     return "empty";
   }
   const last = items[items.length - 1];
+  if (!last) {
+    return "empty";
+  }
   switch (last.kind) {
     case "message":
       return `${last.id}-${last.text.length}`;
@@ -1260,7 +1311,7 @@ function resolveWorkingActivityLabel(
 function findLastUserMessageIndex(items: ConversationItem[]) {
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index];
-    if (item.kind === "message" && item.role === "user") {
+    if (isUserMessageConversationItem(item)) {
       return index;
     }
   }
@@ -1270,7 +1321,7 @@ function findLastUserMessageIndex(items: ConversationItem[]) {
 function findLastAssistantMessageIndex(items: ConversationItem[]) {
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index];
-    if (item.kind === "message" && item.role === "assistant") {
+    if (isAssistantMessageConversationItem(item)) {
       return index;
     }
   }
@@ -1762,7 +1813,7 @@ const DiffRow = memo(function DiffRow({ item }: DiffRowProps) {
 });
 
 function exploreKindLabel(kind: ExploreRowProps["item"]["entries"][number]["kind"]) {
-  return kind[0].toUpperCase() + kind.slice(1);
+  return (kind[0] ?? "").toUpperCase() + kind.slice(1);
 }
 
 const ExploreRow = memo(function ExploreRow({ item, isExpanded, onToggle }: ExploreRowProps) {
@@ -2151,13 +2202,15 @@ export const Messages = memo(function Messages({
 
     if (reasoningIds.length === 0) return;
 
-    const lastReasoningId = reasoningIds[reasoningIds.length - 1];
+    const lastReasoningId = reasoningIds[reasoningIds.length - 1] ?? null;
 
     if (lastReasoningId !== lastAutoExpandedIdRef.current) {
       setExpandedItems((prev) => {
         const next = new Set<string>();
         // Only expand the latest reasoning block, collapse all others
-        next.add(lastReasoningId);
+        if (lastReasoningId) {
+          next.add(lastReasoningId);
+        }
         // Preserve non-reasoning expanded items
         for (const id of prev) {
           const isReasoning = reasoningIds.includes(id);
@@ -2197,7 +2250,7 @@ export const Messages = memo(function Messages({
     }
     for (let index = effectiveItems.length - 1; index > reasoningWindowStartIndex; index -= 1) {
       const item = effectiveItems[index];
-      if (item.kind !== "reasoning") {
+      if (!isReasoningConversationItem(item)) {
         continue;
       }
       const parsed = reasoningMetaById.get(item.id);
@@ -2211,7 +2264,7 @@ export const Messages = memo(function Messages({
   const latestReasoningId = useMemo(() => {
     for (let index = effectiveItems.length - 1; index > reasoningWindowStartIndex; index -= 1) {
       const item = effectiveItems[index];
-      if (item.kind === "reasoning") {
+      if (isReasoningConversationItem(item)) {
         return item.id;
       }
     }
@@ -2230,7 +2283,7 @@ export const Messages = memo(function Messages({
     }> = [];
     for (let index = reasoningWindowStartIndex + 1; index < effectiveItems.length; index += 1) {
       const item = effectiveItems[index];
-      if (item.kind !== "reasoning") {
+      if (!isReasoningConversationItem(item)) {
         continue;
       }
       const parsed = reasoningMetaById.get(item.id);
@@ -2272,7 +2325,7 @@ export const Messages = memo(function Messages({
   const latestTitleOnlyReasoningId = useMemo(() => {
     for (let index = effectiveItems.length - 1; index >= 0; index -= 1) {
       const item = effectiveItems[index];
-      if (item.kind !== "reasoning") {
+      if (!isReasoningConversationItem(item)) {
         continue;
       }
       const parsed = reasoningMetaById.get(item.id);
@@ -2287,7 +2340,7 @@ export const Messages = memo(function Messages({
     let lastUserIndex = -1;
     for (let index = effectiveItems.length - 1; index >= 0; index -= 1) {
       const item = effectiveItems[index];
-      if (item.kind === "message" && item.role === "user") {
+      if (isUserMessageConversationItem(item)) {
         lastUserIndex = index;
         break;
       }
@@ -2297,7 +2350,10 @@ export const Messages = memo(function Messages({
     }
     for (let index = effectiveItems.length - 1; index > lastUserIndex; index -= 1) {
       const item = effectiveItems[index];
-      if (item.kind === "message" && item.role === "assistant") {
+      if (!item) {
+        continue;
+      }
+      if (isAssistantMessageConversationItem(item)) {
         break;
       }
       const label = resolveWorkingActivityLabel(item, activeEngine, presentationProfile);
@@ -2311,7 +2367,7 @@ export const Messages = memo(function Messages({
   const latestAssistantMessageId = useMemo(() => {
     for (let index = effectiveItems.length - 1; index > lastUserMessageIndex; index -= 1) {
       const item = effectiveItems[index];
-      if (item.kind === "message" && item.role === "assistant") {
+      if (isAssistantMessageConversationItem(item)) {
         return item.id;
       }
     }
@@ -2325,7 +2381,7 @@ export const Messages = memo(function Messages({
     let lastUserIndex = -1;
     for (let index = effectiveItems.length - 1; index >= 0; index -= 1) {
       const item = effectiveItems[index];
-      if (item.kind === "message" && item.role === "user") {
+      if (isUserMessageConversationItem(item)) {
         lastUserIndex = index;
         break;
       }
@@ -2335,7 +2391,7 @@ export const Messages = memo(function Messages({
     }
     for (let index = lastUserIndex + 1; index < effectiveItems.length; index += 1) {
       const item = effectiveItems[index];
-      if (item.kind === "message" && item.role === "assistant") {
+      if (isAssistantMessageConversationItem(item)) {
         return false;
       }
     }
@@ -2422,11 +2478,14 @@ export const Messages = memo(function Messages({
       const nextTimelineItems: ConversationItem[] = [];
       let hiddenCount = 0;
       for (let index = 0; index < visibleItems.length; index += 1) {
-        const item = visibleItems[index];
-        if (index < firstUserIndex || index > lastMessageIndex || item.kind === "message") {
-          nextTimelineItems.push(item);
-          continue;
-        }
+      const item = visibleItems[index];
+      if (!item) {
+        continue;
+      }
+      if (index < firstUserIndex || index > lastMessageIndex || isMessageConversationItem(item)) {
+        nextTimelineItems.push(item);
+        continue;
+      }
         hiddenCount += 1;
       }
       return hiddenCount > 0
@@ -2436,7 +2495,7 @@ export const Messages = memo(function Messages({
     let lastUserIndex = -1;
     for (let index = visibleItems.length - 1; index >= 0; index -= 1) {
       const candidate = visibleItems[index];
-      if (candidate.kind === "message" && candidate.role === "user") {
+      if (isUserMessageConversationItem(candidate)) {
         lastUserIndex = index;
         break;
       }
@@ -2449,11 +2508,14 @@ export const Messages = memo(function Messages({
     let hiddenCount = 0;
     for (let index = 0; index < visibleItems.length; index += 1) {
       const item = visibleItems[index];
+      if (!item) {
+        continue;
+      }
       if (index <= lastUserIndex || index === lastIndex) {
         nextTimelineItems.push(item);
         continue;
       }
-      if (item.kind === "message") {
+      if (isMessageConversationItem(item)) {
         nextTimelineItems.push(item);
         continue;
       }
@@ -2826,28 +2888,32 @@ export const Messages = memo(function Messages({
 
   const renderEntry = (entry: GroupedEntry, _index: number) => {
     if (entry.kind === "readGroup") {
-      return <ReadToolGroupBlock key={`rg-${entry.items[0].id}`} items={entry.items} />;
+      const firstItem = entry.items[0];
+      return <ReadToolGroupBlock key={`rg-${firstItem?.id ?? "read-group"}`} items={entry.items} />;
     }
     if (entry.kind === "editGroup") {
+      const firstItem = entry.items[0];
       return (
         <EditToolGroupBlock
-          key={`eg-${entry.items[0].id}`}
+          key={`eg-${firstItem?.id ?? "edit-group"}`}
           items={entry.items}
           onOpenDiffPath={onOpenDiffPath}
         />
       );
     }
     if (entry.kind === "bashGroup") {
+      const firstItem = entry.items[0];
       return (
         <BashToolGroupBlock
-          key={`bg-${entry.items[0].id}`}
+          key={`bg-${firstItem?.id ?? "bash-group"}`}
           items={entry.items}
           onRequestAutoScroll={requestAutoScroll}
         />
       );
     }
     if (entry.kind === "searchGroup") {
-      return <SearchToolGroupBlock key={`sg-${entry.items[0].id}`} items={entry.items} />;
+      const firstItem = entry.items[0];
+      return <SearchToolGroupBlock key={`sg-${firstItem?.id ?? "search-group"}`} items={entry.items} />;
     }
     return renderSingleItem(entry.item);
   };

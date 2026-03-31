@@ -283,7 +283,7 @@ function bindChatDropTargetsForTreeDrag(paths: string[]) {
     }
     setFileTreeDragPosition(event.clientX, event.clientY);
     const target = resolveChatDropTargetFromDragEvent(event);
-    const visualTarget = target ?? getSingleChatInputContainer();
+    const visualTarget = target ?? getSingleChatInputContainer() ?? null;
     const isOverChat = Boolean(target);
     window.__fileTreeDragOverChat = isOverChat;
     applyChatDropTargetHighlight(visualTarget);
@@ -395,7 +395,7 @@ function insertPathsIntoChat(paths: string[]) {
     return false;
   }
   if (paths.length === 1) {
-    window.handleFilePathFromJava(paths[0]);
+    window.handleFilePathFromJava(paths[0] ?? "");
     return true;
   }
   window.handleFilePathFromJava(paths);
@@ -554,6 +554,9 @@ function buildTree(
         break;
       }
       const next = directFolders[0];
+      if (!next) {
+        break;
+      }
       labels.push(next.name);
       node = next;
       path = node.path;
@@ -819,9 +822,10 @@ export function FileTreePanel({
         }
         let folderPath = "";
         for (let index = 0; index < segments.length - 1; index += 1) {
+          const segment = segments[index] ?? "";
           folderPath = folderPath
-            ? `${folderPath}/${segments[index]}`
-            : segments[index];
+            ? `${folderPath}/${segment}`
+            : segment;
           assignIfHigherPriority(folderPath, entryStatus);
         }
       });

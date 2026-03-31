@@ -38,6 +38,9 @@ export function extractKanbanResultSnapshot(
 
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index];
+    if (!item) {
+      continue;
+    }
     if (!summary) {
       const text = extractReadableText(item);
       if (text) {

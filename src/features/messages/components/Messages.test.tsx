@@ -1739,7 +1739,11 @@ describe("Messages", () => {
       name: "messages.anchorJumpToUser",
     });
     expect(anchorButtons.length).toBe(2);
-    fireEvent.click(anchorButtons[0]);
+    const firstAnchorButton = anchorButtons[0];
+    if (!firstAnchorButton) {
+      throw new Error("Anchor button not found");
+    }
+    fireEvent.click(firstAnchorButton);
     expect(scrollToMock).toHaveBeenCalledWith(
       expect.objectContaining({ behavior: "smooth" }),
     );

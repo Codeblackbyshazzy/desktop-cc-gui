@@ -208,7 +208,8 @@ describe("TaskCreateModal", () => {
       expect(onUpdate).toHaveBeenCalled();
     });
 
-    const [, changes] = onUpdate.mock.calls[0];
+    const updateCall = onUpdate.mock.calls[0] ?? [];
+    const [, changes] = updateCall;
     expect(changes.execution?.blockedReason).toBeNull();
   });
 
@@ -350,7 +351,7 @@ describe("TaskCreateModal", () => {
       expect(onSubmit).toHaveBeenCalledTimes(1);
     });
 
-    expect(onSubmit.mock.calls[0][0].autoStart).toBe(false);
-    expect(onSubmit.mock.calls[0][0].schedule?.mode).toBe("recurring");
+    expect(onSubmit.mock.calls[0]?.[0]?.autoStart).toBe(false);
+    expect(onSubmit.mock.calls[0]?.[0]?.schedule?.mode).toBe("recurring");
   });
 });

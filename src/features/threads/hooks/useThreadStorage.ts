@@ -72,7 +72,7 @@ export function useThreadStorage(): UseThreadStorageResult {
       }
       const now = Date.now();
       const expired = keys.filter(
-        (key) => now - pending[key] >= AUTO_TITLE_PENDING_EXPIRE_MS,
+        (key) => now - (pending[key] ?? now) >= AUTO_TITLE_PENDING_EXPIRE_MS,
       );
       if (expired.length === 0) {
         return;

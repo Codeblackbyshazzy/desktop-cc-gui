@@ -1226,7 +1226,7 @@ describe("buildWorkspaceSessionActivity", () => {
 
     expect(result.timeline).toHaveLength(3);
     const occurredAt = result.timeline.map((event) => event.occurredAt);
-    expect(occurredAt[0] - occurredAt[1]).toBeGreaterThanOrEqual(1000);
-    expect(occurredAt[1] - occurredAt[2]).toBeGreaterThanOrEqual(1000);
+    expect((occurredAt[0] ?? 0) - (occurredAt[1] ?? 0)).toBeGreaterThanOrEqual(1000);
+    expect((occurredAt[1] ?? 0) - (occurredAt[2] ?? 0)).toBeGreaterThanOrEqual(1000);
   });
 });

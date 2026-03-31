@@ -552,9 +552,9 @@ describe("usePasteAndDrop path insertion", () => {
     expect(typeof updater).toBe("function");
     const next = updater ? updater([]) : [];
     expect(next).toHaveLength(1);
-    expect(next[0].fileName).toBe("bug.png");
-    expect(next[0].mediaType).toBe("image/png");
-    expect(next[0].data).toBe("C:\\Users\\demo\\Desktop\\bug.png");
+    expect(next[0]?.fileName).toBe("bug.png");
+    expect(next[0]?.mediaType).toBe("image/png");
+    expect(next[0]?.data).toBe("C:\\Users\\demo\\Desktop\\bug.png");
 
     harness.unmount();
   });
@@ -601,10 +601,10 @@ describe("usePasteAndDrop path insertion", () => {
       | undefined;
     const next = updater ? updater([]) : [];
     expect(next).toHaveLength(2);
-    expect(next[0].fileName).toBe("screen.png");
-    expect(next[0].mediaType).toBe("image/png");
-    expect(next[1].fileName).toBe("PIC.JPG");
-    expect(next[1].mediaType).toBe("image/jpeg");
+    expect(next[0]?.fileName).toBe("screen.png");
+    expect(next[0]?.mediaType).toBe("image/png");
+    expect(next[1]?.fileName).toBe("PIC.JPG");
+    expect(next[1]?.mediaType).toBe("image/jpeg");
 
     harness.unmount();
   });
@@ -649,7 +649,7 @@ describe("usePasteAndDrop path insertion", () => {
     const state1 = updater1 ? updater1([]) : [];
     const state2 = updater2 ? updater2(state1) : state1;
     expect(state2).toHaveLength(1);
-    expect(state2[0].data).toBe("C:\\Users\\demo\\Desktop\\bug.png");
+    expect(state2[0]?.data).toBe("C:\\Users\\demo\\Desktop\\bug.png");
 
     harness.unmount();
   });

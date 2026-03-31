@@ -116,7 +116,8 @@ function sliceByComparableLength(text: string, targetLength: number) {
   }
   let compactLength = 0;
   for (let index = 0; index < text.length; index += 1) {
-    if (!/\s/.test(text[index])) {
+    const currentChar = text[index] ?? "";
+    if (!/\s/.test(currentChar)) {
       compactLength += 1;
     }
     if (compactLength >= targetLength) {
@@ -205,7 +206,8 @@ function dedupeAdjacentReasoningParagraphs(value: string) {
       if (`${half}${half}` === compact) {
         let compactLength = 0;
         for (let index = 0; index < trimmed.length; index += 1) {
-          if (!/\s/.test(trimmed[index])) {
+          const currentChar = trimmed[index] ?? "";
+          if (!/\s/.test(currentChar)) {
             compactLength += 1;
           }
           if (compactLength >= half.length) {
@@ -304,7 +306,7 @@ function parseReasoning(item: Extract<ConversationItem, { kind: "reasoning" }>):
   const titleLines = titleSource.split("\n");
   const trimmedLines = titleLines.map((line) => line.trim());
   const titleLineIndex = trimmedLines.findIndex(Boolean);
-  const rawTitle = titleLineIndex >= 0 ? trimmedLines[titleLineIndex] : "";
+  const rawTitle = titleLineIndex >= 0 ? (trimmedLines[titleLineIndex] ?? "") : "";
   const cleanTitle = sanitizeReasoningTitle(rawTitle);
   const summaryTitle = cleanTitle
     ? cleanTitle.length > 80
@@ -470,6 +472,10 @@ function collapseConsecutiveReasoningRuns(
   let index = 0;
   while (index < list.length) {
     const item = list[index];
+    if (!item) {
+      index += 1;
+      continue;
+    }
     if (item.kind !== "reasoning") {
       collapsed.push(item);
       index += 1;
@@ -477,7 +483,11 @@ function collapseConsecutiveReasoningRuns(
     }
 
     let end = index + 1;
-    while (end < list.length && list[end].kind === "reasoning") {
+    while (end < list.length) {
+      const candidate = list[end];
+      if (!candidate || candidate.kind !== "reasoning") {
+        break;
+      }
       end += 1;
     }
 
@@ -489,10 +499,18 @@ function collapseConsecutiveReasoningRuns(
 
     const run = list.slice(index, end) as Array<Extract<ConversationItem, { kind: "reasoning" }>>;
     const latest = run[run.length - 1];
-    let mergedSummary = run[0].summary;
-    let mergedContent = run[0].content;
+    const first = run[0];
+    if (!first || !latest) {
+      index = end;
+      continue;
+    }
+    let mergedSummary = first.summary;
+    let mergedContent = first.content;
     for (let runIndex = 1; runIndex < run.length; runIndex += 1) {
       const candidate = run[runIndex];
+      if (!candidate) {
+        continue;
+      }
       mergedSummary = mergeReasoningRunText(
         mergedSummary,
         candidate.summary,
@@ -980,7 +998,9 @@ function parseFallbackLink(detail: string, fallbackParentId: string) {
   if (!trimmed.includes("→")) {
     return null;
   }
-  const [leftSide, rightSide] = trimmed.split("→", 2).map((part) => part.trim());
+  const [leftSide = "", rightSide = ""] = trimmed
+    .split("→", 2)
+    .map((part) => part.trim());
   const parentMatch = leftSide.match(/^From\s+(.+)$/i);
   const parentId = parentMatch?.[1]?.trim() || fallbackParentId;
   const receivers = rightSide
@@ -1144,6 +1164,11 @@ export function buildThreadActivity(args: WorkspaceSessionActivityThreadContext 
       return;
     }
     const existing = events[existingIndex];
+    if (!existing) {
+      events.push(candidate);
+      exploreEventIndexBySignature.set(signature, events.length - 1);
+      return;
+    }
     events[existingIndex] = {
       ...existing,
       occurredAt: Math.max(existing.occurredAt, candidate.occurredAt),

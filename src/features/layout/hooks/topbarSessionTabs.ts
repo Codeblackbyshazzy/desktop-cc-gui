@@ -117,7 +117,7 @@ export function pruneTopbarSessionWindows(
     dedupedTabs.push(tab);
     const ordinal = windows.activationOrdinalByTabKey[tabKey];
     if (Number.isFinite(ordinal)) {
-      nextActivationOrdinalByTabKey[tabKey] = ordinal;
+      nextActivationOrdinalByTabKey[tabKey] = ordinal ?? 0;
     }
   }
 

@@ -4,7 +4,7 @@
 //! `gemini -p "<prompt>" --output-format stream-json`
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -1188,16 +1188,77 @@ fn extract_text_from_value(value: &Value, depth: usize) -> Option<String> {
     None
 }
 
-fn extract_session_id(event: &Value) -> Option<String> {
-    let event_type = event.get("type").and_then(|v| v.as_str()).unwrap_or("");
-    if event_type != "init" {
+fn normalize_session_id_candidate(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("pending") {
         return None;
     }
-    let session_id = first_non_empty_str(&[
-        event.get("session_id").and_then(|v| v.as_str()),
-        event.get("sessionId").and_then(|v| v.as_str()),
-    ])?;
-    Some(session_id.to_string())
+    if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains("..") {
+        return None;
+    }
+    if trimmed.chars().any(char::is_whitespace) {
+        return None;
+    }
+    Some(trimmed.to_string())
+}
+
+fn extract_session_id_from_object(object: &Map<String, Value>, depth: usize) -> Option<String> {
+    let direct = first_non_empty_str(&[
+        object.get("session_id").and_then(|value| value.as_str()),
+        object.get("sessionId").and_then(|value| value.as_str()),
+    ])
+    .and_then(normalize_session_id_candidate);
+    if direct.is_some() {
+        return direct;
+    }
+
+    if let Some(session) = object.get("session").and_then(|value| value.as_object()) {
+        let nested = first_non_empty_str(&[
+            session.get("session_id").and_then(|value| value.as_str()),
+            session.get("sessionId").and_then(|value| value.as_str()),
+            session.get("id").and_then(|value| value.as_str()),
+        ])
+        .and_then(normalize_session_id_candidate);
+        if nested.is_some() {
+            return nested;
+        }
+    }
+
+    if depth >= 3 {
+        return None;
+    }
+
+    for key in [
+        "result", "payload", "data", "message", "event", "metadata", "thread", "turn",
+    ] {
+        if let Some(nested) = object.get(key) {
+            if let Some(session_id) = extract_session_id_from_value(nested, depth + 1) {
+                return Some(session_id);
+            }
+        }
+    }
+    None
+}
+
+fn extract_session_id_from_value(value: &Value, depth: usize) -> Option<String> {
+    if depth > 3 {
+        return None;
+    }
+    if let Some(object) = value.as_object() {
+        return extract_session_id_from_object(object, depth);
+    }
+    if let Some(items) = value.as_array() {
+        for item in items {
+            if let Some(session_id) = extract_session_id_from_value(item, depth + 1) {
+                return Some(session_id);
+            }
+        }
+    }
+    None
+}
+
+fn extract_session_id(event: &Value) -> Option<String> {
+    extract_session_id_from_value(event, 0)
 }
 
 fn extract_result_error_message(event: &Value) -> Option<String> {
@@ -1975,8 +2036,9 @@ mod tests {
     use super::EngineEvent;
     use super::{
         collect_latest_turn_reasoning_texts, extract_latest_thought_text,
-        extract_tool_events_from_snapshot, parse_gemini_event, should_extract_thought_fallback,
-        GeminiSession, GeminiSessionMessage, GeminiSnapshotToolState,
+        extract_session_id, extract_tool_events_from_snapshot, parse_gemini_event,
+        should_extract_thought_fallback, GeminiSession, GeminiSessionMessage,
+        GeminiSnapshotToolState,
     };
     use base64::{engine::general_purpose::STANDARD, Engine as _};
     use serde_json::json;
@@ -2455,6 +2517,43 @@ mod tests {
         });
         let parsed = parse_gemini_event("workspace-1", &payload);
         assert!(parsed.is_none());
+    }
+
+    #[test]
+    fn extract_session_id_reads_init_event_shape() {
+        let payload = json!({
+            "type": "init",
+            "session_id": "ses_init_123"
+        });
+        assert_eq!(
+            extract_session_id(&payload).as_deref(),
+            Some("ses_init_123")
+        );
+    }
+
+    #[test]
+    fn extract_session_id_reads_nested_result_shape() {
+        let payload = json!({
+            "type": "result",
+            "result": {
+                "session": {
+                    "id": "ses_nested_456"
+                }
+            }
+        });
+        assert_eq!(
+            extract_session_id(&payload).as_deref(),
+            Some("ses_nested_456")
+        );
+    }
+
+    #[test]
+    fn extract_session_id_rejects_invalid_path_like_value() {
+        let payload = json!({
+            "type": "result",
+            "sessionId": "../tmp/session"
+        });
+        assert!(extract_session_id(&payload).is_none());
     }
 
     #[test]

@@ -1,4 +1,5 @@
 import type { GitHubIssue, GitHubPullRequest, GitLogEntry } from "../../../types";
+import type { CommitMessageLanguage } from "../../../services/tauri";
 import type {
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
@@ -127,7 +128,7 @@ type GitDiffPanelProps = {
   commitMessageLoading?: boolean;
   commitMessageError?: string | null;
   onCommitMessageChange?: (value: string) => void;
-  onGenerateCommitMessage?: () => void | Promise<void>;
+  onGenerateCommitMessage?: (language?: CommitMessageLanguage) => void | Promise<void>;
   // Git operations
   onCommit?: () => void | Promise<void>;
   onCommitAndPush?: () => void | Promise<void>;
@@ -1987,6 +1988,34 @@ export function GitDiffPanel({
   ) : (
     <Upload size={12} aria-hidden />
   );
+  const showCommitMessageLanguageMenu = useCallback(
+    async (event: ReactMouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!onGenerateCommitMessage || commitMessageLoading || commitLoading || !canGenerateCommitMessage) {
+        return;
+      }
+      const items = [
+        await MenuItem.new({
+          text: t("git.generateCommitMessageChinese"),
+          action: async () => {
+            await onGenerateCommitMessage("zh");
+          },
+        }),
+        await MenuItem.new({
+          text: t("git.generateCommitMessageEnglish"),
+          action: async () => {
+            await onGenerateCommitMessage("en");
+          },
+        }),
+      ];
+      const menu = await Menu.new({ items });
+      const window = getCurrentWindow();
+      const position = new LogicalPosition(event.clientX, event.clientY);
+      await menu.popup(position, window);
+    },
+    [canGenerateCommitMessage, commitLoading, commitMessageLoading, onGenerateCommitMessage, t],
+  );
   return (
     <aside className="diff-panel" ref={panelRef}>
       <div className="git-panel-header">
@@ -2289,13 +2318,11 @@ export function GitDiffPanel({
                 <button
                   type="button"
                   className="commit-message-generate-button"
-                  onClick={() => {
-                    if (!canGenerateCommitMessage) {
-                      return;
-                    }
-                    void onGenerateCommitMessage?.();
+                  onClick={(event) => {
+                    void showCommitMessageLanguageMenu(event);
                   }}
                   disabled={commitMessageLoading || !canGenerateCommitMessage}
+                  aria-haspopup="menu"
                   title={
                     stagedFiles.length > 0
                       ? "Generate commit message from staged changes"

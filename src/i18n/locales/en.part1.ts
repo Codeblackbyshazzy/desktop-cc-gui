@@ -1503,6 +1503,8 @@ const enPart1 = {
     generateCommitMessageStaged: "Generate commit message from staged changes",
     generateCommitMessageUnstaged: "Generate commit message from unstaged changes",
     generateCommitMessage: "Generate commit message",
+    generateCommitMessageChinese: "Generate Chinese commit message",
+    generateCommitMessageEnglish: "Generate English commit message",
     commitMessageRequiresCodex: "AI commit message generation requires the Codex CLI. Install it with: npm install -g @openai/codex",
     // Git log and status
     noMessage: "No message",

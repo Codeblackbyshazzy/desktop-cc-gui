@@ -4,7 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GitHistoryWorktreePanel } from "./GitHistoryWorktreePanel";
 
 const mockGetGitStatus = vi.fn<(workspaceId: string) => Promise<unknown>>();
+const mockGenerateCommitMessage = vi.fn<
+  (workspaceId: string, language?: "zh" | "en") => Promise<string>
+>();
 const mockStageGitFile = vi.fn<(workspaceId: string, path: string) => Promise<void>>();
+const mockMenuPopup = vi.fn<
+  (items: Array<{ text: string; action?: () => Promise<void> | void }>) => Promise<void>
+>();
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -24,6 +30,8 @@ vi.mock("react-i18next", () => ({
         "git.unstageAllChangesAction": "Unstage all",
         "git.discardAllChangesAction": "Discard all",
         "git.generateCommitMessage": "Generate commit message",
+        "git.generateCommitMessageChinese": "Generate Chinese commit message",
+        "git.generateCommitMessageEnglish": "Generate English commit message",
       };
       return translations[key] ?? key;
     },
@@ -36,7 +44,8 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("../../../services/tauri", () => ({
   commitGit: vi.fn(async () => undefined),
-  generateCommitMessage: vi.fn(async () => "Generated commit message"),
+  generateCommitMessage: (workspaceId: string, language?: "zh" | "en") =>
+    mockGenerateCommitMessage(workspaceId, language),
   getGitStatus: (workspaceId: string) => mockGetGitStatus(workspaceId),
   revertGitAll: vi.fn(async () => undefined),
   revertGitFile: vi.fn(async () => undefined),
@@ -45,10 +54,39 @@ vi.mock("../../../services/tauri", () => ({
   unstageGitFile: vi.fn(async () => undefined),
 }));
 
+vi.mock("@tauri-apps/api/menu", () => ({
+  Menu: {
+    new: vi.fn(async ({ items }: { items: Array<{ text: string; action?: () => Promise<void> | void }> }) => ({
+      popup: vi.fn(async () => {
+        await mockMenuPopup(items);
+      }),
+    })),
+  },
+  MenuItem: { new: vi.fn(async (options: Record<string, unknown>) => options) },
+}));
+
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => ({}),
+}));
+
+vi.mock("@tauri-apps/api/dpi", () => ({
+  LogicalPosition: class LogicalPosition {
+    x: number;
+    y: number;
+    constructor(x: number, y: number) {
+      this.x = x;
+      this.y = y;
+    }
+  },
+}));
+
 describe("GitHistoryWorktreePanel", () => {
   beforeEach(() => {
     mockGetGitStatus.mockReset();
+    mockGenerateCommitMessage.mockReset();
     mockStageGitFile.mockReset();
+    mockMenuPopup.mockReset();
+    mockGenerateCommitMessage.mockResolvedValue("Generated commit message");
     mockStageGitFile.mockResolvedValue(undefined);
     mockGetGitStatus.mockResolvedValue({
       branchName: "main",
@@ -90,6 +128,22 @@ describe("GitHistoryWorktreePanel", () => {
 
     await waitFor(() => {
       expect(mockStageGitFile).toHaveBeenCalledWith("w1", "src/feature/unstaged.ts");
+    });
+  });
+
+  it("generates English commit message after menu selection", async () => {
+    mockMenuPopup.mockImplementationOnce(async (items) => {
+      const englishItem = items.find((item) => item.text === "Generate English commit message");
+      await englishItem?.action?.();
+    });
+
+    render(<GitHistoryWorktreePanel workspaceId="w1" listView="tree" />);
+
+    const generateButton = await screen.findByRole("button", { name: "Generate commit message" });
+    fireEvent.click(generateButton);
+
+    await waitFor(() => {
+      expect(mockGenerateCommitMessage).toHaveBeenCalledWith("w1", "en");
     });
   });
 

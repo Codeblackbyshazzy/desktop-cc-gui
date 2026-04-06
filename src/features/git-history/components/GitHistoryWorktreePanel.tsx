@@ -4,10 +4,14 @@ import {
   useMemo,
   useRef,
   useState,
+  type MouseEvent as ReactMouseEvent,
   type CSSProperties,
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { LogicalPosition } from "@tauri-apps/api/dpi";
+import { Menu, MenuItem } from "@tauri-apps/api/menu";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import Check from "lucide-react/dist/esm/icons/check";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
@@ -19,6 +23,7 @@ import SquarePen from "lucide-react/dist/esm/icons/square-pen";
 import Undo2 from "lucide-react/dist/esm/icons/undo-2";
 import FileIcon from "../../../components/FileIcon";
 import {
+  type CommitMessageLanguage,
   commitGit,
   generateCommitMessage,
   getGitStatus,
@@ -330,14 +335,14 @@ export function GitHistoryWorktreePanel({
     await handleMutation(() => revertGitAll(workspaceId));
   }, [handleMutation, operationLoading, workspaceId]);
 
-  const handleGenerateCommitMessage = useCallback(async () => {
+  const handleGenerateCommitMessage = useCallback(async (language: CommitMessageLanguage = "zh") => {
     if (commitMessageLoading || commitLoading) {
       return;
     }
     setCommitMessageError(null);
     setCommitMessageLoading(true);
     try {
-      const generated = await generateCommitMessage(workspaceId);
+      const generated = await generateCommitMessage(workspaceId, language);
       setCommitMessage(generated);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -346,6 +351,35 @@ export function GitHistoryWorktreePanel({
       setCommitMessageLoading(false);
     }
   }, [commitLoading, commitMessageLoading, workspaceId]);
+
+  const showCommitMessageLanguageMenu = useCallback(
+    async (event: ReactMouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (commitMessageLoading || commitLoading || operationLoading) {
+        return;
+      }
+      const items = [
+        await MenuItem.new({
+          text: t("git.generateCommitMessageChinese"),
+          action: async () => {
+            await handleGenerateCommitMessage("zh");
+          },
+        }),
+        await MenuItem.new({
+          text: t("git.generateCommitMessageEnglish"),
+          action: async () => {
+            await handleGenerateCommitMessage("en");
+          },
+        }),
+      ];
+      const menu = await Menu.new({ items });
+      const window = getCurrentWindow();
+      const position = new LogicalPosition(event.clientX, event.clientY);
+      await menu.popup(position, window);
+    },
+    [commitLoading, commitMessageLoading, handleGenerateCommitMessage, operationLoading, t],
+  );
 
   const hasWorktreeChanges = status.stagedFiles.length > 0 || status.unstagedFiles.length > 0;
   const canCommit = commitMessage.trim().length > 0 && hasWorktreeChanges && !commitLoading;
@@ -668,10 +702,11 @@ export function GitHistoryWorktreePanel({
             <button
               type="button"
               className="git-history-worktree-generate diff-row-action"
-              onClick={() => {
-                void handleGenerateCommitMessage();
+              onClick={(event) => {
+                void showCommitMessageLanguageMenu(event);
               }}
               disabled={commitMessageLoading || commitLoading || operationLoading}
+              aria-haspopup="menu"
               title={t("git.generateCommitMessage")}
               aria-label={t("git.generateCommitMessage")}
             >

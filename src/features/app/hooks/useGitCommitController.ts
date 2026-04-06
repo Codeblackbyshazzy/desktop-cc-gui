@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type RefObject } from "react
 import { useTranslation } from "react-i18next";
 import type { WorkspaceInfo } from "../../../types";
 import {
+  type CommitMessageLanguage,
   commitGit,
   generateCommitMessage,
   pushGit,
@@ -34,7 +35,7 @@ type GitCommitController = {
   syncError: string | null;
   hasWorktreeChanges: boolean;
   onCommitMessageChange: (value: string) => void;
-  onGenerateCommitMessage: () => Promise<void>;
+  onGenerateCommitMessage: (language?: CommitMessageLanguage) => Promise<void>;
   onCommit: () => Promise<void>;
   onCommitAndPush: () => Promise<void>;
   onCommitAndSync: () => Promise<void>;
@@ -82,7 +83,7 @@ export function useGitCommitController({
     setCommitMessage(value);
   }, []);
 
-  const handleGenerateCommitMessage = useCallback(async () => {
+  const handleGenerateCommitMessage = useCallback(async (language: CommitMessageLanguage = "zh") => {
     if (!activeWorkspace || commitMessageLoading) {
       return;
     }
@@ -90,7 +91,7 @@ export function useGitCommitController({
     setCommitMessageLoading(true);
     setCommitMessageError(null);
     try {
-      const message = await generateCommitMessage(workspaceId);
+      const message = await generateCommitMessage(workspaceId, language);
       if (!shouldApplyCommitMessage(activeWorkspaceIdRef.current, workspaceId)) {
         return;
       }

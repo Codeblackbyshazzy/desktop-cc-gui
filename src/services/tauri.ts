@@ -1963,16 +1963,20 @@ export async function deleteOpenCodeSession(
   );
 }
 
+export type CommitMessageLanguage = "zh" | "en";
+
 export async function getCommitMessagePrompt(
   workspaceId: string,
+  language: CommitMessageLanguage = "zh",
 ): Promise<string> {
-  return invoke("get_commit_message_prompt", { workspaceId });
+  return invoke("get_commit_message_prompt", { workspaceId, language });
 }
 
 export async function generateCommitMessage(
   workspaceId: string,
+  language: CommitMessageLanguage = "zh",
 ): Promise<string> {
-  return invoke("generate_commit_message", { workspaceId });
+  return invoke("generate_commit_message", { workspaceId, language });
 }
 
 export async function listThreadTitles(

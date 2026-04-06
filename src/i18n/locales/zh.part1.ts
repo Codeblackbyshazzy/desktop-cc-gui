@@ -1481,6 +1481,8 @@ const zhPart1 = {
     generateCommitMessageStaged: "从已暂存的更改生成提交信息",
     generateCommitMessageUnstaged: "从未暂存的更改生成提交信息",
     generateCommitMessage: "生成提交信息",
+    generateCommitMessageChinese: "生成中文提交信息",
+    generateCommitMessageEnglish: "生成英文提交信息",
     commitMessageRequiresCodex: "AI 生成提交信息需要 Codex CLI，请先安装: npm install -g @openai/codex",
     // Git 日志和状态
     noMessage: "无消息",

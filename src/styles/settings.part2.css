@@ -1184,6 +1184,31 @@
   gap: 8px;
 }
 
+.settings-mcp-overview-grid,
+.settings-mcp-engine-grid,
+.settings-mcp-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.settings-mcp-section-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  margin-bottom: 10px;
+}
+
+.settings-mcp-engine-select {
+  min-width: 220px;
+}
+
+.settings-mcp-engine-select-trigger {
+  width: 220px;
+}
+
 .settings-mcp-global {
   display: flex;
   justify-content: space-between;
@@ -1235,6 +1260,95 @@
 
 .settings-mcp-codex-card {
   padding: 10px 12px;
+}
+
+.settings-mcp-overview-card {
+  min-height: 96px;
+}
+
+.settings-mcp-engine-card.is-active,
+.settings-mcp-engine-panel {
+  border: 1px solid var(--accent-primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-primary) 18%, transparent);
+}
+
+.settings-mcp-engine-card {
+  padding: 10px 12px;
+}
+
+.settings-mcp-engine-head,
+.settings-mcp-engine-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settings-mcp-engine-meta-grid,
+.settings-mcp-rule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.settings-mcp-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-mcp-panel-highlight {
+  margin-top: 8px;
+  color: var(--text-strong);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.settings-mcp-engine-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-card) 88%, transparent);
+}
+
+.settings-mcp-detail-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-mcp-detail-label {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.settings-mcp-detail-value {
+  color: var(--text-strong);
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.settings-mcp-empty-state {
+  margin-top: 12px;
+}
+
+@media (max-width: 900px) {
+  .settings-mcp-section-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-mcp-engine-select,
+  .settings-mcp-engine-select-trigger {
+    width: 100%;
+  }
 }
 
 .settings-mcp-codex-head {

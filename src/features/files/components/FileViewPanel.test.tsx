@@ -162,6 +162,18 @@ function buildLocation(path: string, line: number, character: number) {
   };
 }
 
+function buildWindowsLocation(path: string, line: number, character: number) {
+  const normalizedPath = path.replace(/\\/g, "/");
+  return {
+    uri: `file:///C:/Repo/${normalizedPath}`,
+    path: `C:\\Repo\\${path.replace(/\//g, "\\")}`,
+    range: {
+      start: { line, character },
+      end: { line, character: character + 1 },
+    },
+  };
+}
+
 describe("FileViewPanel navigation", () => {
   afterEach(() => {
     cleanup();
@@ -246,6 +258,41 @@ describe("FileViewPanel navigation", () => {
     expect(onNavigateToLocation).toHaveBeenCalledWith("src/Bar.java", {
       line: 13,
       column: 7,
+    });
+  });
+
+  it("normalizes Windows absolute code-intel paths back to workspace-relative navigation targets", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: "const main = 1;",
+      truncated: false,
+    });
+    vi.mocked(getCodeIntelDefinition).mockResolvedValue({
+      result: [buildWindowsLocation("src/Foo.ts", 2, 5)],
+    } as any);
+    const onNavigateToLocation = vi.fn();
+
+    render(
+      <FileViewPanel
+        workspaceId="ws-nav-win"
+        workspacePath="C:/Repo"
+        filePath="src/Main.ts"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onNavigateToLocation={onNavigateToLocation}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await screen.findByTestId("mock-codemirror");
+    fireEvent.click(screen.getByTitle(/gotoDefinition/i));
+
+    await waitFor(() => {
+      expect(onNavigateToLocation).toHaveBeenCalledWith("src/Foo.ts", {
+        line: 3,
+        column: 6,
+      });
     });
   });
 
@@ -750,6 +797,46 @@ describe("FileViewPanel markdown modes", () => {
     expect(screen.queryByTestId("file-markdown-preview")).toBeNull();
   });
 
+  it("keeps large markdown on the low-cost preview path across preview edit switches", async () => {
+    const oversizedMarkdown = [
+      "# Oversized README",
+      ...Array.from({ length: 220 }, (_, index) => `- ${index}: ${"x".repeat(900)}`),
+    ].join("\n");
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: oversizedMarkdown,
+      truncated: false,
+    });
+
+    const { container } = render(
+      <FileViewPanel
+        workspaceId="ws-md-budget"
+        workspacePath="/repo"
+        filePath="README.md"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector(".fvp-code-preview")).toBeTruthy();
+    });
+    expect(screen.queryByTestId("file-markdown-preview")).toBeNull();
+    expect(vi.mocked(readWorkspaceFile)).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    expect((await screen.findByTestId("mock-codemirror") as HTMLTextAreaElement).value)
+      .toContain("# Oversized README");
+
+    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
+    await waitFor(() => {
+      expect(container.querySelector(".fvp-code-preview")).toBeTruthy();
+    });
+    expect(vi.mocked(readWorkspaceFile)).toHaveBeenCalledTimes(1);
+  });
+
   it("toggles markdown preview and preserves edits", async () => {
     vi.mocked(readWorkspaceFile).mockResolvedValue({
       content: "# Start",
@@ -819,6 +906,53 @@ describe("FileViewPanel markdown modes", () => {
       expect(screen.getByTestId("file-markdown-mermaid-preview")).toBeTruthy();
       expect(mermaidRender).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("resets markdown renderer state when switching to another markdown file", async () => {
+    vi.mocked(readWorkspaceFile).mockImplementation(async (_workspaceId, path) => ({
+      content:
+        path === "README.md"
+          ? "```mermaid\ngraph TD\nA-->B\n```"
+          : "# Guide\n\nFresh body",
+      truncated: false,
+    }));
+    mermaidInitialize.mockClear();
+    mermaidRender.mockClear();
+
+    const baseProps = {
+      workspaceId: "ws-md-switch",
+      workspacePath: "/repo",
+      openTargets: [] as Parameters<typeof FileViewPanel>[0]["openTargets"],
+      openAppIconById: {},
+      selectedOpenAppId: "",
+      onSelectOpenAppId: vi.fn(),
+      onClose: vi.fn(),
+    };
+
+    const { rerender } = render(
+      <FileViewPanel
+        {...baseProps}
+        filePath="README.md"
+      />,
+    );
+
+    await screen.findByTestId("file-markdown-preview");
+    fireEvent.click(screen.getByRole("tab", { name: "Render" }));
+    await screen.findByTestId("file-markdown-mermaid-preview");
+    expect(mermaidRender).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <FileViewPanel
+        {...baseProps}
+        filePath="docs/guide.md"
+      />,
+    );
+
+    await screen.findByTestId("file-markdown-preview");
+    expect(screen.getByText("Guide")).toBeTruthy();
+    expect(screen.queryByTestId("file-markdown-mermaid-preview")).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Render" })).toBeNull();
+    expect(screen.queryByText("A-->B")).toBeNull();
   });
 
   it("renders frontmatter metadata separately from markdown body", async () => {
@@ -975,6 +1109,41 @@ describe("FileViewPanel markdown modes", () => {
 
     await screen.findByTestId("mock-codemirror");
     expect(screen.queryByTestId("file-structured-preview")).toBeNull();
+  });
+
+  it("switches file modes locally without extra workspace reads", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: [
+        "# build image",
+        "FROM node:20-alpine",
+        "WORKDIR /app",
+      ].join("\n"),
+      truncated: false,
+    });
+
+    render(
+      <FileViewPanel
+        workspaceId="ws-docker-local"
+        workspacePath="/repo"
+        filePath="Dockerfile"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await screen.findByTestId("mock-codemirror");
+    expect(vi.mocked(readWorkspaceFile)).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
+    await screen.findByTestId("file-structured-preview");
+
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    await screen.findByTestId("mock-codemirror");
+
+    expect(vi.mocked(readWorkspaceFile)).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the main-window fixed sample matrix on one render-profile-driven chain", async () => {

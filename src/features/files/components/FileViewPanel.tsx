@@ -84,8 +84,11 @@ import {
 import {
   measureFilePreviewMetrics,
   resolveFileRenderProfile,
-  shouldUseLowCostPreview,
 } from "../utils/fileRenderProfile";
+import {
+  resolveDefaultFileViewMode,
+  resolveFileViewSurface,
+} from "../utils/fileViewSurface";
 
 type FileViewPanelProps = {
   workspaceId: string;
@@ -525,13 +528,14 @@ export function FileViewPanel({
 }: FileViewPanelProps) {
   const { t } = useTranslation();
   const renderProfile = useMemo(() => resolveFileRenderProfile(filePath), [filePath]);
-  const isMarkdown = renderProfile.kind === "markdown";
-  const structuredPreviewKind = renderProfile.structuredKind;
-  const defaultsToPreview = isMarkdown;
+  const defaultMode = useMemo(
+    () => resolveDefaultFileViewMode(renderProfile, initialMode),
+    [initialMode, renderProfile],
+  );
   const isImage = renderProfile.kind === "image";
   const isBinary = renderProfile.kind === "binary-unsupported";
   const [mode, setMode] = useState<"preview" | "edit">(
-    () => (defaultsToPreview ? "preview" : initialMode),
+    () => defaultMode,
   );
   const [editorTheme, setEditorTheme] = useState<EditorTheme>(() => resolveEditorTheme());
   const [content, setContent] = useState("");
@@ -879,7 +883,7 @@ export function FileViewPanel({
     pendingOpenFindPanelRef.current = false;
     recentDefinitionTriggerRef.current = null;
     recentReferencesTriggerRef.current = null;
-    setMode(defaultsToPreview ? "preview" : initialMode);
+    setMode(defaultMode);
     onActiveFileLineRangeChange?.(null);
     lastReportedLineRangeRef.current = "";
     setIsDefinitionLoading(false);
@@ -893,7 +897,7 @@ export function FileViewPanel({
     setExternalChangeSyncState((current) =>
       reduceExternalChangeSyncState(current, { type: "file-loaded" }),
     );
-  }, [defaultsToPreview, filePath, initialMode, onActiveFileLineRangeChange]);
+  }, [defaultMode, filePath, onActiveFileLineRangeChange]);
 
   useEffect(() => {
     if (typeof document === "undefined" || typeof MutationObserver === "undefined") {
@@ -1769,14 +1773,16 @@ export function FileViewPanel({
     () => measureFilePreviewMetrics(content, truncated),
     [content, truncated],
   );
-  const useLowCostPreview = useMemo(
-    () => shouldUseLowCostPreview(renderProfile, previewMetrics),
-    [previewMetrics, renderProfile],
+  const viewSurface = useMemo(
+    () => resolveFileViewSurface(renderProfile, mode, previewMetrics),
+    [mode, previewMetrics, renderProfile],
   );
   const previewLanguage = renderProfile.previewLanguage;
   const highlightedPreviewLanguage = useMemo(
-    () => (useLowCostPreview ? null : previewLanguage),
-    [previewLanguage, useLowCostPreview],
+    () => (viewSurface.kind === "code-preview" && !viewSurface.useLowCostPreview
+      ? previewLanguage
+      : null),
+    [previewLanguage, viewSurface.kind, viewSurface.useLowCostPreview],
   );
   const lines = useMemo(() => content.split("\n"), [content]);
   const highlightedLines = useMemo(
@@ -2245,7 +2251,7 @@ export function FileViewPanel({
     }
 
     // Image preview
-    if (isImage) {
+    if (viewSurface.kind === "image") {
       return (
         <div className="fvp-image-preview">
           {imageSrc ? (
@@ -2275,14 +2281,13 @@ export function FileViewPanel({
     }
 
     // Other binary files (audio, video, archives, etc.)
-    if (isBinary) {
+    if (viewSurface.kind === "binary-unsupported") {
       return (
         <div className="fvp-status">{t("files.unsupportedFormat")}</div>
       );
     }
 
-    // Edit mode
-    if (mode === "edit") {
+    if (viewSurface.kind === "editor") {
       // Code edit: CodeMirror with syntax highlighting
       return (
         <div className="fvp-editor">
@@ -2325,7 +2330,7 @@ export function FileViewPanel({
     }
 
     // Preview mode: Markdown rendered
-    if (isMarkdown && !useLowCostPreview) {
+    if (viewSurface.kind === "markdown-preview") {
       return (
         <div className="fvp-preview-scroll">
           <FileMarkdownPreview
@@ -2336,7 +2341,7 @@ export function FileViewPanel({
       );
     }
 
-    if (structuredPreviewKind && !useLowCostPreview) {
+    if (viewSurface.kind === "structured-preview") {
       return (
         <div className="fvp-preview-scroll">
           <FileStructuredPreview

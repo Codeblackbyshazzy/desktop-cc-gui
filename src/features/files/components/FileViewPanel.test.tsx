@@ -977,6 +977,132 @@ describe("FileViewPanel markdown modes", () => {
     expect(screen.queryByTestId("file-structured-preview")).toBeNull();
   });
 
+  it("keeps the main-window fixed sample matrix on one render-profile-driven chain", async () => {
+    const sampleContentByPath: Record<string, string> = {
+      "README.md": ["# Workspace title", "", "- item"].join("\n"),
+      "Dockerfile": [
+        "# build image",
+        "FROM node:20-alpine",
+        "WORKDIR /app",
+      ].join("\n"),
+      "docker-compose.yml": [
+        "services:",
+        "  app:",
+        "    image: mossx:dev",
+      ].join("\n"),
+      ".env.local": [
+        "# local overrides",
+        "APP_ENV=dev",
+        "API_BASE=http://localhost:3000",
+      ].join("\n"),
+      "build.gradle.kts": [
+        "// gradle setup",
+        "plugins {",
+        "  kotlin(\"jvm\") version \"1.9.24\"",
+        "}",
+      ].join("\n"),
+    };
+
+    vi.mocked(readWorkspaceFile).mockImplementation(async (_workspaceId, path) => ({
+      content: sampleContentByPath[path] ?? `missing:${path}`,
+      truncated: false,
+    }));
+
+    const openTabs = [
+      "README.md",
+      "Dockerfile",
+      "docker-compose.yml",
+      ".env.local",
+      "build.gradle.kts",
+    ];
+    const baseProps = {
+      workspaceId: "ws-main-matrix",
+      workspacePath: "/repo",
+      openTargets: [] as Parameters<typeof FileViewPanel>[0]["openTargets"],
+      openAppIconById: {},
+      selectedOpenAppId: "",
+      onSelectOpenAppId: vi.fn(),
+      onClose: vi.fn(),
+      openTabs,
+    };
+
+    const { container, rerender } = render(
+      <FileViewPanel
+        {...baseProps}
+        filePath="README.md"
+        activeTabPath="README.md"
+      />,
+    );
+
+    await screen.findByTestId("file-markdown-preview");
+    expect(screen.queryByTestId("mock-codemirror")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    expect((await screen.findByTestId("mock-codemirror") as HTMLTextAreaElement).value).toBe(
+      sampleContentByPath["README.md"],
+    );
+
+    rerender(
+      <FileViewPanel
+        {...baseProps}
+        filePath="Dockerfile"
+        activeTabPath="Dockerfile"
+      />,
+    );
+
+    const dockerfileEditor = await screen.findByTestId("mock-codemirror");
+    expect((dockerfileEditor as HTMLTextAreaElement).value).toContain("FROM node:20-alpine");
+    expect(screen.queryByText("Workspace title")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
+    await screen.findByTestId("file-structured-preview");
+
+    rerender(
+      <FileViewPanel
+        {...baseProps}
+        filePath="docker-compose.yml"
+        activeTabPath="docker-compose.yml"
+      />,
+    );
+
+    const composeEditor = await screen.findByTestId("mock-codemirror");
+    expect((composeEditor as HTMLTextAreaElement).value).toContain("services:");
+    expect(screen.queryByTestId("file-structured-preview")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
+    await waitFor(() => {
+      expect(container.querySelector(".fvp-code-preview")).toBeTruthy();
+    });
+    expect(screen.queryByTestId("file-markdown-preview")).toBeNull();
+
+    rerender(
+      <FileViewPanel
+        {...baseProps}
+        filePath=".env.local"
+        activeTabPath=".env.local"
+      />,
+    );
+
+    const envEditor = await screen.findByTestId("mock-codemirror");
+    expect((envEditor as HTMLTextAreaElement).value).toContain("APP_ENV=dev");
+    expect(screen.queryByText("services:")).toBeNull();
+
+    rerender(
+      <FileViewPanel
+        {...baseProps}
+        filePath="build.gradle.kts"
+        activeTabPath="build.gradle.kts"
+      />,
+    );
+
+    const gradleEditor = await screen.findByTestId("mock-codemirror");
+    expect((gradleEditor as HTMLTextAreaElement).value).toContain("kotlin(\"jvm\")");
+    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
+    await waitFor(() => {
+      expect(container.querySelector(".fvp-code-preview")).toBeTruthy();
+    });
+    expect(screen.queryByTestId("file-markdown-preview")).toBeNull();
+    expect(screen.queryByTestId("file-structured-preview")).toBeNull();
+  });
+
   it("keeps structured preview only on the top-level preview path", async () => {
     vi.mocked(readWorkspaceFile).mockResolvedValue({
       content: [

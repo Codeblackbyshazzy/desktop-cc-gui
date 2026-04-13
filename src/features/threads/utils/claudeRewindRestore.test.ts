@@ -183,6 +183,35 @@ describe("claudeRewindRestore", () => {
     );
   });
 
+  it("restores deleted files without inline diff when rewind plan still marks delete", async () => {
+    vi.mocked(readWorkspaceFile).mockRejectedValue(
+      new Error("Failed to open file: No such file or directory"),
+    );
+
+    const impactedItems: ConversationItem[] = [
+      fileToolItem("tool-delete-no-diff", {
+        changes: [
+          {
+            path: "src/deleted-no-diff.ts",
+            kind: "deleted",
+          },
+        ],
+      }),
+    ];
+
+    await applyClaudeRewindWorkspaceRestore({
+      workspaceId: "ws-1",
+      workspacePath: "/repo",
+      impactedItems,
+    });
+
+    expect(writeWorkspaceFile).toHaveBeenCalledWith(
+      "ws-1",
+      "src/deleted-no-diff.ts",
+      "",
+    );
+  });
+
   it("prefers structured old/new replacement when diff context no longer matches", async () => {
     vi.mocked(readWorkspaceFile).mockResolvedValue({
       content: [
@@ -263,6 +292,84 @@ describe("claudeRewindRestore", () => {
     ]);
     expect(writeWorkspaceFile).not.toHaveBeenCalled();
     expect(trashWorkspaceItem).not.toHaveBeenCalled();
+  });
+
+  it("uses structured old/new fields to restore modified files even when diff is missing", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: "const value = 'after';\n",
+      truncated: false,
+    });
+
+    const impactedItems: ConversationItem[] = [
+      fileToolItem("tool-structured-missing-diff", {
+        detail: JSON.stringify({
+          input: {
+            file_path: "src/no-diff-structured.ts",
+            old_string: "const value = 'before';\n",
+            new_string: "const value = 'after';\n",
+          },
+        }),
+        changes: [
+          {
+            path: "src/no-diff-structured.ts",
+            kind: "modified",
+          },
+        ],
+      }),
+    ];
+
+    await applyClaudeRewindWorkspaceRestore({
+      workspaceId: "ws-1",
+      workspacePath: "/repo",
+      impactedItems,
+    });
+
+    expect(writeWorkspaceFile).toHaveBeenCalledWith(
+      "ws-1",
+      "src/no-diff-structured.ts",
+      "const value = 'before';\n",
+    );
+  });
+
+  it("treats modified entries with empty old text as add changes and deletes the file on rewind", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: "export const created = true;\n",
+      truncated: false,
+    });
+
+    const impactedItems: ConversationItem[] = [
+      fileToolItem("tool-structured-add-like", {
+        detail: JSON.stringify({
+          input: {
+            file_path: "src/structured-add-like.ts",
+            old_string: "",
+            new_string: "export const created = true;\n",
+          },
+        }),
+        changes: [
+          {
+            path: "src/structured-add-like.ts",
+            kind: "modified",
+          },
+        ],
+      }),
+    ];
+
+    await applyClaudeRewindWorkspaceRestore({
+      workspaceId: "ws-1",
+      workspacePath: "/repo",
+      impactedItems,
+    });
+
+    expect(trashWorkspaceItem).toHaveBeenCalledWith(
+      "ws-1",
+      "src/structured-add-like.ts",
+    );
+    expect(writeWorkspaceFile).not.toHaveBeenCalledWith(
+      "ws-1",
+      "src/structured-add-like.ts",
+      "",
+    );
   });
 
   it("restores original snapshots when rewind rollback is needed", async () => {

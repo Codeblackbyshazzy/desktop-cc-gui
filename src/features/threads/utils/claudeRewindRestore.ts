@@ -113,6 +113,51 @@ type StructuredToolChange = {
   newText?: string;
 };
 
+function inferKindFromDiff(diff?: string): "add" | "delete" | "rename" | "modified" | undefined {
+  const normalizedDiff = diff?.trim();
+  if (!normalizedDiff) {
+    return undefined;
+  }
+  const patchPaths = extractPatchPaths(normalizedDiff);
+  if (patchPaths.previousPath && patchPaths.nextPath && patchPaths.previousPath !== patchPaths.nextPath) {
+    return "rename";
+  }
+  const hunkHeaderMatch = normalizedDiff.match(/@@ -(\d+),?(\d*) \+(\d+),?(\d*) @@/);
+  if (hunkHeaderMatch) {
+    const oldCountRaw = hunkHeaderMatch[2];
+    const newCountRaw = hunkHeaderMatch[4];
+    const oldCount = oldCountRaw ? Number(oldCountRaw) : 1;
+    const newCount = newCountRaw ? Number(newCountRaw) : 1;
+    if (oldCount === 0 && newCount > 0) {
+      return "add";
+    }
+    if (newCount === 0 && oldCount > 0) {
+      return "delete";
+    }
+  }
+  return "modified";
+}
+
+function inferKindFromStructuredText(
+  oldText?: string,
+  newText?: string,
+): "add" | "delete" | "modified" | undefined {
+  const normalizedOld = normalizeLineEndings(oldText ?? "");
+  const normalizedNew = normalizeLineEndings(newText ?? "");
+  const hasOld = normalizedOld.length > 0;
+  const hasNew = normalizedNew.length > 0;
+  if (!hasOld && hasNew) {
+    return "add";
+  }
+  if (hasOld && !hasNew) {
+    return "delete";
+  }
+  if (hasOld || hasNew) {
+    return "modified";
+  }
+  return undefined;
+}
+
 const STRUCTURED_EDIT_PATH_KEYS = [
   "file_path",
   "filePath",
@@ -223,17 +268,54 @@ function extractStructuredToolChanges(
         diff: change.diff,
       })),
     ) ?? [];
+  const inferredChangeByNormalizedPath = new Map<string, StructuredToolChange>();
+  inferredChanges.forEach((change) => {
+    const normalizedPath = normalizeWorkspaceRestorePath(
+      workspacePath,
+      change.path ?? "",
+    );
+    if (!normalizedPath || inferredChangeByNormalizedPath.has(normalizedPath)) {
+      return;
+    }
+    inferredChangeByNormalizedPath.set(normalizedPath, {
+      path: change.path,
+      kind: change.kind,
+      diff: change.diff,
+    });
+  });
   const hintMap = buildStructuredEditHintMap(workspacePath, item);
   return mergedChanges.map((change) => {
     const normalizedPath = normalizeWorkspaceRestorePath(
       workspacePath,
       change.path,
     );
+    const inferredChange = normalizedPath
+      ? inferredChangeByNormalizedPath.get(normalizedPath)
+      : undefined;
     const hint = normalizedPath ? hintMap.get(normalizedPath) : undefined;
+    const rawPrimaryKind = normalizeFileChangeKind(change.kind);
+    const rawSecondaryKind = normalizeFileChangeKind(inferredChange?.kind);
+    const resolvedKind = (() => {
+      if (!rawPrimaryKind) {
+        return rawSecondaryKind;
+      }
+      if (!rawSecondaryKind) {
+        return rawPrimaryKind;
+      }
+      if (rawPrimaryKind === "modified" && rawSecondaryKind !== "modified") {
+        return rawSecondaryKind;
+      }
+      return rawPrimaryKind;
+    })();
+    const resolvedDiff = change.diff?.trim()
+      ? change.diff
+      : inferredChange?.diff?.trim()
+        ? inferredChange.diff
+        : undefined;
     return {
       path: change.path,
-      kind: change.kind,
-      diff: change.diff,
+      kind: resolvedKind,
+      diff: resolvedDiff,
       oldText: hint?.oldText,
       newText: hint?.newText,
     };
@@ -319,9 +401,17 @@ export function collectClaudeRewindRestorePlan(
       const normalizedKind =
         normalizeFileChangeKind(change.kind) ?? "modified";
       const diff = change.diff?.trim() || undefined;
+      const inferredKind =
+        inferKindFromDiff(diff) ??
+        inferKindFromStructuredText(change.oldText, change.newText) ??
+        "modified";
+      const effectiveKind =
+        normalizedKind === "modified" && inferredKind !== "modified"
+          ? inferredKind
+          : normalizedKind;
       const patchPaths = extractPatchPaths(diff);
       const previousPath =
-        normalizedKind === "rename"
+        effectiveKind === "rename"
           ? normalizeWorkspaceRestorePath(
               workspacePath,
               patchPaths.previousPath ?? "",
@@ -329,17 +419,17 @@ export function collectClaudeRewindRestorePlan(
           : undefined;
       plan.push({
         path:
-          normalizedKind === "rename"
+          effectiveKind === "rename"
             ? normalizeWorkspaceRestorePath(
                 workspacePath,
                 patchPaths.nextPath ?? normalizedPath,
               ) ?? normalizedPath
             : normalizedPath,
         kind:
-          normalizedKind === "add" ||
-          normalizedKind === "delete" ||
-          normalizedKind === "rename"
-            ? normalizedKind
+          effectiveKind === "add" ||
+          effectiveKind === "delete" ||
+          effectiveKind === "rename"
+            ? effectiveKind
             : "modified",
         diff,
         previousPath,
@@ -629,12 +719,20 @@ function computeRewoundSnapshots(
           content: "",
           newline: "\n" as const,
         };
+      const structuredRevertedContent = reverseApplyStructuredEdit(
+        "",
+        entry,
+      );
       nextSnapshots.set(entry.path, {
         path: entry.path,
         exists: true,
-        content: currentSnapshot.content,
+        content:
+          structuredRevertedContent === null
+            ? currentSnapshot.content
+            : structuredRevertedContent,
         newline: currentSnapshot.newline,
       });
+      changedPaths.add(entry.path);
       continue;
     }
 
@@ -676,11 +774,6 @@ function computeRewoundSnapshots(
       continue;
     }
 
-    if (!entry.diff) {
-      skippedEntries.push(entry);
-      continue;
-    }
-
     const currentSnapshot =
       nextSnapshots.get(entry.path) ??
       originalSnapshots.get(entry.path) ?? {
@@ -699,8 +792,16 @@ function computeRewoundSnapshots(
       baseContent,
       entry,
     );
+    if (structuredRevertedContent === null && !entry.diff) {
+      skippedEntries.push(entry);
+      continue;
+    }
     let revertedContent = structuredRevertedContent;
     if (revertedContent === null) {
+      if (!entry.diff) {
+        skippedEntries.push(entry);
+        continue;
+      }
       try {
         revertedContent = reverseApplyUnifiedDiff(baseContent, entry.diff);
       } catch {

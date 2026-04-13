@@ -54,7 +54,10 @@ function getFirstStringField(source: Record<string, unknown> | null, keys: strin
 }
 
 export function normalizeFileChangeKind(rawKind: unknown): string | undefined {
-  const normalized = asString(rawKind).trim().toLowerCase();
+  const normalized = asString(rawKind)
+    .trim()
+    .replace(/^\((.+)\)$/, "$1")
+    .toLowerCase();
   if (!normalized) {
     return undefined;
   }
@@ -67,10 +70,60 @@ export function normalizeFileChangeKind(rawKind: unknown): string | undefined {
   if (["r", "rename", "renamed", "move", "moved"].includes(normalized)) {
     return "rename";
   }
-  if (["m", "mod", "modify", "modified", "update", "updated", "edit", "edited"].includes(normalized)) {
+  if (
+    ["m", "mod", "modify", "modified", "u", "update", "updated", "edit", "edited"].includes(
+      normalized,
+    )
+  ) {
     return "modified";
   }
   return normalized;
+}
+
+function looksLikeFilePathToken(path: string) {
+  const normalized = path.trim();
+  if (!normalized) {
+    return false;
+  }
+  if (
+    normalized.includes("/") ||
+    normalized.includes("\\") ||
+    normalized.startsWith("./") ||
+    normalized.startsWith("../") ||
+    /^[A-Za-z]:[\\/]/.test(normalized) ||
+    normalized.includes(".")
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function parseStatusPathEntries(text: string): FileChangeEntry[] {
+  if (!text.trim()) {
+    return [];
+  }
+  const entries: FileChangeEntry[] = [];
+  const lines = text.split(/\r?\n/);
+  for (const line of lines) {
+    const normalizedLine = line.trim();
+    if (!normalizedLine) {
+      continue;
+    }
+    const match = normalizedLine.match(/^\(?([A-Z])\)?\s+(.+)$/);
+    if (!match) {
+      continue;
+    }
+    const kind = normalizeFileChangeKind(match[1] ?? "");
+    const rawPath = (match[2] ?? "").trim();
+    if (!kind || !looksLikeFilePathToken(rawPath)) {
+      continue;
+    }
+    entries.push({
+      path: rawPath,
+      kind,
+    });
+  }
+  return entries;
 }
 
 function parsePatchFileEntries(text: string): FileChangeEntry[] {
@@ -338,9 +391,31 @@ export function mergeToolChanges(
       return change;
     }
     const diff = pickRicherDiff(change.diff, local.diff);
+    const remoteKind = normalizeFileChangeKind(change.kind);
+    const localKind = normalizeFileChangeKind(local.kind);
+    const mergedKind = (() => {
+      if (!remoteKind) {
+        return localKind;
+      }
+      if (!localKind) {
+        return remoteKind;
+      }
+      if (remoteKind === "modified" && localKind !== "modified") {
+        return localKind;
+      }
+      if (
+        remoteKind !== "add" &&
+        remoteKind !== "delete" &&
+        remoteKind !== "rename" &&
+        remoteKind !== "modified"
+      ) {
+        return localKind;
+      }
+      return remoteKind;
+    })();
     return {
       ...change,
-      kind: change.kind ?? local.kind,
+      kind: mergedKind,
       diff,
     };
   });
@@ -384,7 +459,10 @@ export function inferFileChangesFromPayload(value: unknown): FileChangeEntry[] {
       return;
     }
     if (typeof payload === "string") {
-      for (const parsed of parsePatchFileEntries(payload)) {
+      for (const parsed of [
+        ...parsePatchFileEntries(payload),
+        ...parseStatusPathEntries(payload),
+      ]) {
         merge(parsed.path, parsed.kind, parsed.diff);
       }
       return;

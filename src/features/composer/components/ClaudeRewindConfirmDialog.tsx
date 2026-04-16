@@ -25,6 +25,8 @@ export type ClaudeRewindPreviewState = RewindPreviewState;
 type RewindConfirmDialogProps = {
   preview: RewindPreviewState | null;
   isBusy?: boolean;
+  restoreWorkspaceFiles?: boolean;
+  onRestoreWorkspaceFilesChange?: (value: boolean) => void;
   onOpenDiffPath?: (path: string) => void;
   onStoreChanges?: (
     preview: RewindPreviewState,
@@ -118,6 +120,8 @@ function buildCompactPreviewLines(diff?: string): ParsedDiffLine[] | null {
 export function ClaudeRewindConfirmDialog({
   preview,
   isBusy = false,
+  restoreWorkspaceFiles = true,
+  onRestoreWorkspaceFilesChange,
   onOpenDiffPath: _onOpenDiffPath,
   onStoreChanges,
   onCancel,
@@ -267,15 +271,17 @@ export function ClaudeRewindConfirmDialog({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="claude-rewind-modal-header">
-          <div className="claude-rewind-modal-kicker">
-            {resolveRewindEngineLabel(preview.engine)}
-          </div>
           <div className="claude-rewind-modal-heading">
-            <h3 id="claude-rewind-dialog-title">
-              {t("rewind.dialogTitle", {
-                engine: resolveRewindEngineLabel(preview.engine),
-              })}
-            </h3>
+            <div className="claude-rewind-modal-heading-main">
+              <div className="claude-rewind-modal-kicker">
+                {resolveRewindEngineLabel(preview.engine)}
+              </div>
+              <h3 id="claude-rewind-dialog-title">
+                {t("rewind.dialogTitle", {
+                  engine: resolveRewindEngineLabel(preview.engine),
+                })}
+              </h3>
+            </div>
             <p id="claude-rewind-dialog-description">
               {t("rewind.dialogDescription")}
             </p>
@@ -339,6 +345,35 @@ export function ClaudeRewindConfirmDialog({
               <p>{t("rewind.impactSummary")}</p>
               <p>{t("rewind.impactFollowUp")}</p>
             </div>
+          </section>
+
+          <section className="claude-rewind-modal-section">
+            <div className="claude-rewind-modal-section-label">
+              {t("rewind.workspaceRestoreSectionTitle")}
+            </div>
+            <label className="claude-rewind-modal-toggle">
+              <input
+                type="checkbox"
+                checked={restoreWorkspaceFiles}
+                onChange={(event) => {
+                  onRestoreWorkspaceFilesChange?.(event.target.checked);
+                }}
+                disabled={isBusy || isExporting}
+                className="claude-rewind-modal-toggle-input"
+                data-testid="claude-rewind-restore-toggle"
+              />
+              <span className="claude-rewind-modal-toggle-switch" aria-hidden>
+                <span className="claude-rewind-modal-toggle-thumb" />
+              </span>
+              <span className="claude-rewind-modal-toggle-copy">
+                <span className="claude-rewind-modal-toggle-title">
+                  {t("rewind.restoreWorkspaceFilesLabel")}
+                </span>
+                <span className="claude-rewind-modal-toggle-hint">
+                  {t("rewind.restoreWorkspaceFilesHint")}
+                </span>
+              </span>
+            </label>
           </section>
 
           <section className="claude-rewind-modal-section">

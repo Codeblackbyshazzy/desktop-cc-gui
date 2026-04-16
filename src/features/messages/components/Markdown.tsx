@@ -65,6 +65,15 @@ type LatexRenderEntry =
   | { kind: "label"; text: string }
   | { kind: "formula"; source: string };
 
+const SUPPORTS_REGEX_LOOKBEHIND = (() => {
+  try {
+    void new RegExp("(?<=a)b");
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
 function areMarkdownPropsEqual(prev: MarkdownProps, next: MarkdownProps) {
   return (
     prev.value === next.value &&
@@ -297,13 +306,72 @@ function looksLikeStandaloneLatexFormulaLine(value: string) {
   return (plainWordTokens?.length ?? 0) === 0;
 }
 
+const INLINE_MATH_TRAILING_PUNCTUATION = new Set([
+  "，",
+  "。",
+  "！",
+  "？",
+  "；",
+  "：",
+  ",",
+  ".",
+  ";",
+  ":",
+  "!",
+  "?",
+]);
+
+function isUnescapedCharacter(value: string, index: number) {
+  let backslashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && value[cursor] === "\\"; cursor -= 1) {
+    backslashCount += 1;
+  }
+  return backslashCount % 2 === 0;
+}
+
+function extractSingleDollarInlineMath(
+  value: string,
+  options?: { allowTrailingPunctuation?: boolean },
+) {
+  if (!value.startsWith("$") || value.startsWith("$$")) {
+    return null;
+  }
+  let candidate = value;
+  if (options?.allowTrailingPunctuation) {
+    const trailingChar = candidate[candidate.length - 1] ?? "";
+    if (INLINE_MATH_TRAILING_PUNCTUATION.has(trailingChar)) {
+      candidate = candidate.slice(0, -1);
+    }
+  }
+  if (!candidate.endsWith("$") || candidate.length < 2) {
+    return null;
+  }
+  const closingIndex = candidate.length - 1;
+  if (!isUnescapedCharacter(candidate, closingIndex)) {
+    return null;
+  }
+  return candidate.slice(1, closingIndex);
+}
+
+function extractSingleLineDisplayMathExpression(value: string) {
+  if (!value.startsWith("$$") || !value.endsWith("$$") || value.length < 4) {
+    return null;
+  }
+  const closingStart = value.length - 2;
+  if (!isUnescapedCharacter(value, closingStart)) {
+    return null;
+  }
+  const expression = value.slice(2, closingStart).trim();
+  return expression || null;
+}
+
 function looksLikeExplicitInlineMathLine(value: string) {
   const trimmed = value.trim();
   if (!trimmed) {
     return false;
   }
   return (
-    /^\$(?!\$)[\s\S]*?(?<!\\)\$[，。！？；：,.;:!?]?$/.test(trimmed) ||
+    extractSingleDollarInlineMath(trimmed, { allowTrailingPunctuation: true }) !== null ||
     /^\\\([\s\S]*?\\\)[，。！？；：,.;:!?]?$/.test(trimmed)
   );
 }
@@ -329,12 +397,8 @@ function normalizeStandaloneMathDisplayLines(value: string) {
       return [line];
     }
 
-    const singleLineDisplayMatch = trimmed.match(/^\$\$(?!\s*$)([\s\S]*?)(?<!\\)\$\$$/);
-    if (singleLineDisplayMatch) {
-      const expression = (singleLineDisplayMatch[1] ?? "").trim();
-      if (!expression) {
-        return [line];
-      }
+    const expression = extractSingleLineDisplayMathExpression(trimmed);
+    if (expression) {
       changed = true;
       return [
         `${leadingWhitespace}$$`,
@@ -1073,18 +1137,30 @@ function unwrapLatexDelimiters(source: string) {
   if (!trimmed) {
     return trimmed;
   }
-  const wrappedPatterns = [
-    /^\$\$\s*([\s\S]*?)\s*\$\$$/,
-    /^\\\[\s*([\s\S]*?)\s*\\\]$/,
-    /^\$(?!\$)\s*([\s\S]*?)\s*(?<!\\)\$$/,
-    /^\\\(\s*([\s\S]*?)\s*\\\)$/,
-  ];
-  for (const pattern of wrappedPatterns) {
-    const match = trimmed.match(pattern);
-    if (!match) {
-      continue;
+  const displayBlockMatch = trimmed.match(/^\$\$\s*([\s\S]*?)\s*\$\$$/);
+  if (displayBlockMatch) {
+    const inner = (displayBlockMatch[1] ?? "").trim();
+    if (inner) {
+      return inner;
     }
-    const inner = (match[1] ?? "").trim();
+  }
+  const displayParenMatch = trimmed.match(/^\\\[\s*([\s\S]*?)\s*\\\]$/);
+  if (displayParenMatch) {
+    const inner = (displayParenMatch[1] ?? "").trim();
+    if (inner) {
+      return inner;
+    }
+  }
+  const inlineDollarWrapped = extractSingleDollarInlineMath(trimmed);
+  if (inlineDollarWrapped) {
+    const inner = inlineDollarWrapped.trim();
+    if (inner) {
+      return inner;
+    }
+  }
+  const inlineParenMatch = trimmed.match(/^\\\(\s*([\s\S]*?)\s*\\\)$/);
+  if (inlineParenMatch) {
+    const inner = (inlineParenMatch[1] ?? "").trim();
     if (inner) {
       return inner;
     }
@@ -1647,9 +1723,15 @@ export const Markdown = memo(function Markdown({
 
   // Memoize plugin arrays so ReactMarkdown doesn't re-initialize its processor
   const remarkPluginsMemo = useMemo(
-    () => (softBreaks
-      ? [remarkGfm, remarkBreaks, remarkMath, remarkFileLinks]
-      : [remarkGfm, remarkMath, remarkFileLinks]),
+    () => {
+      const plugins = softBreaks
+        ? [remarkBreaks, remarkMath, remarkFileLinks]
+        : [remarkMath, remarkFileLinks];
+      if (SUPPORTS_REGEX_LOOKBEHIND) {
+        return [remarkGfm, ...plugins];
+      }
+      return plugins;
+    },
     [softBreaks],
   );
   const rehypePluginsMemo = useMemo(

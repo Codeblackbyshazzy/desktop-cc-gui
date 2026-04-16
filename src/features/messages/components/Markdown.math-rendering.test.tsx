@@ -94,6 +94,28 @@ describe("Markdown math rendering", () => {
     expect(container.textContent).not.toContain("$P(\\theta");
   });
 
+  it("does not parse inline formula when closing dollar is escaped", () => {
+    const value = "这是原始文本：$a\\$";
+
+    const { container } = render(
+      <Markdown value={value} className="markdown" codeBlockStyle="message" />,
+    );
+
+    expect(container.querySelector(".katex")).toBeFalsy();
+    expect(container.textContent).toContain("这是原始文本");
+    expect(container.textContent).toContain("a\\");
+  });
+
+  it("parses inline formula when closing dollar has an even backslash prefix", () => {
+    const value = "双反斜杠场景：$a\\\\$";
+
+    const { container } = render(
+      <Markdown value={value} className="markdown" codeBlockStyle="message" />,
+    );
+
+    expect(container.querySelector(".katex")).toBeTruthy();
+  });
+
   it("keeps indented formulas renderable inside ordered lists", () => {
     const value = [
       "1. 贝叶斯公式",

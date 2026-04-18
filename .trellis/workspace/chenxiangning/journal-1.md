@@ -1186,3 +1186,58 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 22: 同步 runtime orchestrator pool console 方案与默认预算
+
+**Date**: 2026-04-18
+**Task**: 同步 runtime orchestrator pool console 方案与默认预算
+**Branch**: `feature/vvvv0.4.3`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标:
+- 处理上一轮提交后剩余的 OpenSpec / Rust 默认值改动，并按同样提交风格单独提交。
+- 确保 runtime orchestrator pool console 的 proposal/design/checklist/tasks 与当前实现保持一致。
+
+主要改动:
+- 回写 runtime orchestrator pool console 的实现状态，明确 Codex 已进入 budgeted pool，Claude Code 已纳入统一 lifecycle / shutdown / observability，但预算配置仍分阶段推进。
+- 同步 release checklist、tasks、proposal、design 中的可见 settings runtime section、runtime reconnect recovery、diagnostics counters 与 Codex-only budget 约束。
+- 更新后端默认预算参数，将 Codex warm 实例默认上限改为 2，warm TTL 改为 120 秒，使默认值与当前控制台语义一致。
+
+涉及模块:
+- openspec/changes/runtime-orchestrator-pool-console/design.md
+- openspec/changes/runtime-orchestrator-pool-console/proposal.md
+- openspec/changes/runtime-orchestrator-pool-console/release-checklist.md
+- openspec/changes/runtime-orchestrator-pool-console/tasks.md
+- src-tauri/src/types.rs
+
+验证结果:
+- cargo test --manifest-path src-tauri/Cargo.toml types --quiet
+- git diff review for remaining OpenSpec / Rust changes
+
+后续事项:
+- `cargo test` 本次仅出现仓库里既有 Rust warnings，没有新的 error；若后续继续清理 backend，可单独处理这些 warning。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6deeca2e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

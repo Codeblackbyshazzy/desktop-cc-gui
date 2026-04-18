@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 21
+- **Total Sessions**: 22
 - **Last Active**: 2026-04-18
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1188 | Active |
+| `journal-1.md` | ~1243 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 22 | 2026-04-18 | 同步 runtime orchestrator pool console 方案与默认预算 | `6deeca2e` | `feature/vvvv0.4.3` |
 | 21 | 2026-04-18 | 压缩 runtime 预算卡片布局 | `e8a71ebb` | `feature/vvvv0.4.3` |
 | 20 | 2026-04-18 | 修复会话继续时失效线程恢复 | `2e3a5b08c1a4c721c9a44502191f773d205b8944` | `feature/vvvv0.4.3` |
 | 19 | 2026-04-18 | 优化 runtime 恢复提示与预算设置边界处理 | `d7b0c02212d50a0af37f473ea15897a2a6226d38` | `feature/vvvv0.4.3` |

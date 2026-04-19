@@ -1876,3 +1876,56 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 34: codex 模块拆分 thread listing 与 MCP config
+
+**Date**: 2026-04-19
+**Task**: codex 模块拆分 thread listing 与 MCP config
+**Branch**: `feature/vvvv0.4.3`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标:
+- 按模块级拆分 src-tauri/src/codex/mod.rs，大文件降到 2500 行左右且不改变原有能力。
+
+主要改动:
+- 新增 src-tauri/src/codex/thread_listing.rs，下沉 unified thread listing、session merge、workspace fallback model 逻辑。
+- 新增 src-tauri/src/codex/mcp_config.rs，下沉 global MCP config 读取与解析逻辑。
+- 精简 src-tauri/src/codex/mod.rs，仅保留 command 入口与必要 orchestrate/re-export。
+
+涉及模块:
+- src-tauri/src/codex/mod.rs
+- src-tauri/src/codex/thread_listing.rs
+- src-tauri/src/codex/mcp_config.rs
+
+验证结果:
+- cargo test --manifest-path src-tauri/Cargo.toml codex::tests -- --nocapture 通过（11 passed）。
+- cargo test --manifest-path src-tauri/Cargo.toml list_global_mcp_servers -- --nocapture 通过（目标过滤后无失败）。
+- mod.rs 行数从 3020 降到 2277。
+
+后续事项:
+- 如需继续降低复杂度，可后续拆分 background helper flow（thread title / commit message / run metadata）逻辑。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7ad5652c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

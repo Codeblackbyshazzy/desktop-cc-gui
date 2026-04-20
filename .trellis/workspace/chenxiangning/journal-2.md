@@ -1110,3 +1110,71 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 55: 补强 Codex 会话自恢复与零活动超时兜底
+
+**Date**: 2026-04-20
+**Task**: 补强 Codex 会话自恢复与零活动超时兜底
+**Branch**: `feature/vvvv0.4.5`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标:
+- 对当前工作区进行 review，重点检查会话恢复链路的边界条件、异常输入与 pseudo-processing 残留。
+- 修复 Codex stale thread binding 导致必须手工点“恢复并发送”的问题。
+- 修复 turn 已开始但 runtime 无后续活动时 UI 长时间卡在 loading 的问题。
+
+主要改动:
+- 在 useThreadMessaging send path 中新增一次性 stale-thread 自愈，识别 `thread not found` / `[SESSION_NOT_FOUND] session file not found` 后先 refreshThread 再重发，并避免重复 optimistic user bubble。
+- 在 useThreadEventHandlers 中新增 20 秒 no-activity watchdog；若 turn 已 started 但没有 delta、heartbeat、item lifecycle 或完成/失败事件，主动结束 processing、清空 active turn，并追加可恢复错误消息。
+- 为上述行为补充 vitest 回归测试，新增中英文 i18n 文案，并同步回写 OpenSpec proposal/tasks。
+- 顺手修复 useThreadMessaging.ts 本次触达区域的 React Hook exhaustive-deps warning，降低 stale closure 风险。
+
+涉及模块:
+- src/features/threads/hooks/useThreadMessaging.ts
+- src/features/threads/hooks/threadMessagingHelpers.ts
+- src/features/threads/hooks/useThreadEventHandlers.ts
+- src/features/threads/hooks/useThreadMessaging.test.tsx
+- src/features/threads/hooks/useThreadEventHandlers.test.ts
+- src/i18n/locales/en.part1.ts
+- src/i18n/locales/zh.part1.ts
+- openspec/changes/harden-conversation-runtime-stability/proposal.md
+- openspec/changes/harden-conversation-runtime-stability/tasks.md
+
+验证结果:
+- `npm exec vitest run src/features/threads/hooks/useThreadMessaging.test.tsx src/features/threads/hooks/useThreadEventHandlers.test.ts src/features/threads/hooks/useThreadActions.test.tsx src/features/messages/components/runtimeReconnect.test.ts src/features/messages/components/Messages.runtime-reconnect.test.tsx` 通过（157 tests passed）。
+- `npm exec vitest run src/features/threads/hooks/useThreadMessaging.test.tsx src/features/threads/hooks/useThreadEventHandlers.test.ts` 通过（83 tests passed）。
+- `npm run check:runtime-contracts` 通过。
+- `npm run lint` 通过（0 errors, 105 existing warnings）。
+- `npx eslint ...changed ts/tsx files...` 通过（0 warnings）。
+- `npm run typecheck` 通过。
+- `npm run check:large-files:near-threshold` / `npm run check:large-files:gate` 通过；本次变更后 `useThreadMessaging.ts` 为 2770 行，未触达 3000 行硬门禁。
+- `git diff --check` 通过。
+
+后续事项:
+- 继续推进 OpenSpec 中 runtime recovery guard、last-good continuity 与 evidence correlation 的剩余 P0/P1 项。
+- 仓库仍有 105 个历史 React Hook warning，后续可按模块分批治理。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c0c475f6af600f5af91482bc2094f839999123a1` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -47,6 +47,7 @@ import {
   detectEngines,
   engineSendMessage,
   exportRewindFiles,
+  getWorkspaceSessionProjectionSummary,
   listGlobalCodexSessions,
   listProjectRelatedCodexSessions,
   listExternalSpecTree,
@@ -244,6 +245,28 @@ describe("tauri invoke wrappers", () => {
       query: { keyword: "feature", engine: "codex", status: "active" },
       cursor: "offset:0",
       limit: 5,
+    });
+  });
+
+  it("maps workspace projection summary requests", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      scopeKind: "project",
+      ownerWorkspaceIds: ["ws-2", "ws-3"],
+      activeTotal: 8,
+      archivedTotal: 2,
+      allTotal: 10,
+      filteredTotal: 8,
+      partialSources: [],
+    });
+
+    await getWorkspaceSessionProjectionSummary("ws-2", {
+      query: { keyword: "feature", engine: "codex", status: "active" },
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("get_workspace_session_projection_summary", {
+      workspaceId: "ws-2",
+      query: { keyword: "feature", engine: "codex", status: "active" },
     });
   });
 

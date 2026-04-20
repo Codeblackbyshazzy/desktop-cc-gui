@@ -9,12 +9,14 @@ import type { WorkspaceInfo } from "../../../../../types";
 import {
   archiveWorkspaceSessions,
   deleteWorkspaceSessions,
+  getWorkspaceSessionProjectionSummary,
   listGlobalCodexSessions,
   listProjectRelatedCodexSessions,
   listWorkspaceSessions,
 } from "../../../../../services/tauri";
 
 vi.mock("../../../../../services/tauri", () => ({
+  getWorkspaceSessionProjectionSummary: vi.fn(),
   listGlobalCodexSessions: vi.fn(),
   listProjectRelatedCodexSessions: vi.fn(),
   listWorkspaceSessions: vi.fn(),
@@ -70,6 +72,15 @@ function getCheckboxByName(name: string) {
 describe("SessionManagementSection", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(getWorkspaceSessionProjectionSummary).mockResolvedValue({
+      scopeKind: "project",
+      ownerWorkspaceIds: ["ws-1", "ws-2"],
+      activeTotal: 0,
+      archivedTotal: 0,
+      allTotal: 0,
+      filteredTotal: 0,
+      partialSources: [],
+    });
     vi.mocked(listWorkspaceSessions).mockResolvedValue({
       data: [],
       nextCursor: null,
@@ -92,6 +103,15 @@ describe("SessionManagementSection", () => {
   });
 
   it("renders owner workspace label for aggregated project entries", async () => {
+    vi.mocked(getWorkspaceSessionProjectionSummary).mockResolvedValue({
+      scopeKind: "project",
+      ownerWorkspaceIds: ["ws-1", "ws-2"],
+      activeTotal: 2,
+      archivedTotal: 0,
+      allTotal: 2,
+      filteredTotal: 2,
+      partialSources: [],
+    });
     vi.mocked(listWorkspaceSessions).mockResolvedValue({
       data: [
         {
@@ -132,6 +152,49 @@ describe("SessionManagementSection", () => {
     expect(await screen.findByText("Ungrouped / Workspace")).toBeTruthy();
     expect(await screen.findByText("Ungrouped / [worktree] Workspace Worktree")).toBeTruthy();
     expect(await screen.findAllByText("cli/codex")).toHaveLength(2);
+    expect(await screen.findByText("settings.sessionManagementFilteredTotalCount")).toBeTruthy();
+    expect(await screen.findByText("settings.sessionManagementCurrentPageCount")).toBeTruthy();
+  });
+
+  it("explains filtered total versus current page window for project scope", async () => {
+    vi.mocked(getWorkspaceSessionProjectionSummary).mockResolvedValue({
+      scopeKind: "project",
+      ownerWorkspaceIds: ["ws-1", "ws-2"],
+      activeTotal: 23,
+      archivedTotal: 4,
+      allTotal: 27,
+      filteredTotal: 23,
+      partialSources: ["codex-history-unavailable"],
+    });
+    vi.mocked(listWorkspaceSessions).mockResolvedValue({
+      data: Array.from({ length: 3 }, (_, index) => ({
+        sessionId: `codex:${index}`,
+        workspaceId: "ws-1",
+        title: `Session ${index}`,
+        updatedAt: 1710000000000 + index,
+        engine: "codex",
+        archivedAt: null,
+        threadKind: "native",
+      })),
+      nextCursor: "offset:3",
+      partialSource: null,
+    });
+
+    render(
+      <SessionManagementSection
+        title="Session Management"
+        description="Manage sessions"
+        workspaces={[workspace, worktree]}
+        groupedWorkspaces={[{ id: null, name: "Ungrouped", workspaces: [workspace, worktree] }]}
+        initialWorkspaceId="ws-1"
+      />,
+    );
+
+    expect(await screen.findAllByText("settings.sessionManagementFilteredTotalCount")).not.toHaveLength(0);
+    expect(await screen.findAllByText("settings.sessionManagementCurrentPageCount")).not.toHaveLength(0);
+    expect(await screen.findByText("settings.sessionManagementVisibleWindowHint")).toBeTruthy();
+    expect(await screen.findByText("settings.sessionManagementActiveProjectionScopeHint")).toBeTruthy();
+    expect(await screen.findByText("settings.sessionManagementPartialSource")).toBeTruthy();
   });
 
   it("switches to global archive mode and renders unassigned history label", async () => {
@@ -244,6 +307,32 @@ describe("SessionManagementSection", () => {
 
     await waitFor(() => {
       expect(listGlobalCodexSessions).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("reloads the projection summary when project scope is refreshed", async () => {
+    render(
+      <SessionManagementSection
+        title="Session Management"
+        description="Manage sessions"
+        workspaces={[workspace]}
+        groupedWorkspaces={[{ id: null, name: "Ungrouped", workspaces: [workspace] }]}
+        initialWorkspaceId="ws-1"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(getWorkspaceSessionProjectionSummary).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "settings.projectSessionRefresh",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(getWorkspaceSessionProjectionSummary).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -584,6 +673,66 @@ describe("SessionManagementSection", () => {
     await waitFor(() => {
       expect(deleteWorkspaceSessions).toHaveBeenNthCalledWith(1, "ws-1", ["codex:main"]);
       expect(deleteWorkspaceSessions).toHaveBeenNthCalledWith(2, "ws-2", ["codex:worktree"]);
+    });
+  });
+
+  it("notifies every succeeded owner workspace after a cross-workspace delete", async () => {
+    const onSessionsMutated = vi.fn();
+    vi.mocked(listWorkspaceSessions).mockResolvedValueOnce({
+      data: [
+        {
+          sessionId: "codex:main",
+          workspaceId: "ws-1",
+          title: "Main session",
+          updatedAt: 1710000000000,
+          engine: "codex",
+          archivedAt: null,
+          threadKind: "native",
+        },
+        {
+          sessionId: "codex:worktree",
+          workspaceId: "ws-2",
+          title: "Worktree session",
+          updatedAt: 1710000000001,
+          engine: "codex",
+          archivedAt: null,
+          threadKind: "native",
+        },
+      ],
+      nextCursor: null,
+      partialSource: null,
+    });
+    vi.mocked(deleteWorkspaceSessions)
+      .mockResolvedValueOnce({
+        results: [{ sessionId: "codex:main", ok: true }],
+      })
+      .mockResolvedValueOnce({
+        results: [{ sessionId: "codex:worktree", ok: true }],
+      });
+
+    render(
+      <SessionManagementSection
+        title="Session Management"
+        description="Manage sessions"
+        workspaces={[workspace, worktree]}
+        groupedWorkspaces={[{ id: null, name: "Ungrouped", workspaces: [workspace, worktree] }]}
+        initialWorkspaceId="ws-1"
+        onSessionsMutated={onSessionsMutated}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Main session" }));
+    fireEvent.click(getCheckboxByName("Worktree session"));
+    fireEvent.click(getEnabledButtonByTestId("settings-project-sessions-delete-selected"));
+    fireEvent.click(getEnabledButtonByTestId("settings-project-sessions-delete-selected"));
+
+    await waitFor(() => {
+      expect(onSessionsMutated).toHaveBeenCalledTimes(2);
+      expect(onSessionsMutated).toHaveBeenNthCalledWith(1, "ws-1");
+      expect(onSessionsMutated).toHaveBeenNthCalledWith(2, "ws-2");
+    });
+    await waitFor(() => {
+      expect(getWorkspaceSessionProjectionSummary).toHaveBeenCalledTimes(2);
     });
   });
 

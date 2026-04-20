@@ -85,6 +85,7 @@ import {
   isThreadResumeNotFoundError,
   isWorkspaceNotConnectedError,
   mapWithConcurrency,
+  mergeCodexCatalogSessionSummaries,
   mergeGeminiSessionSummaries,
   mergeRecoveredThreadSummaries,
   normalizeGeminiSessionSummaries,
@@ -1976,12 +1977,22 @@ export function useThreadActions({
               NATIVE_SESSION_LIST_FETCH_TIMEOUT_MS,
             )
           : Promise.resolve([] as Awaited<ReturnType<typeof getOpenCodeSessionListService>>);
-        const [claudeResult, opencodeResult] = await Promise.allSettled([
+        const codexCatalogSessionsPromise = canListWorkspaceSessions
+          ? withTimeout(
+              tauriServices.listWorkspaceSessions(workspace.id, {
+                query: { status: "active", engine: "codex" },
+                limit: SESSION_CATALOG_PAGE_SIZE,
+              }),
+              NATIVE_SESSION_LIST_FETCH_TIMEOUT_MS,
+            )
+          : Promise.resolve(null);
+        const [claudeResult, opencodeResult, codexCatalogResult] = await Promise.allSettled([
           withTimeout(
             listClaudeSessionsService(workspace.path, 50),
             NATIVE_SESSION_LIST_FETCH_TIMEOUT_MS,
           ),
           opencodeSessionsPromise,
+          codexCatalogSessionsPromise,
         ]);
         if (claudeResult.status === "fulfilled") {
           if (claudeResult.value === null) {
@@ -2079,6 +2090,80 @@ export function useThreadActions({
               mergedById.set(id, next);
             }
           });
+        }
+        if (codexCatalogResult.status === "fulfilled") {
+          if (codexCatalogResult.value === null) {
+            onDebug?.({
+              id: `${Date.now()}-client-codex-catalog-timeout`,
+              timestamp: Date.now(),
+              source: "client",
+              label: "thread/list codex catalog timeout",
+              payload: {
+                workspaceId: workspace.id,
+                timeoutMs: NATIVE_SESSION_LIST_FETCH_TIMEOUT_MS,
+              },
+            });
+          }
+          const codexCatalogPage =
+            codexCatalogResult.value && typeof codexCatalogResult.value === "object"
+              ? codexCatalogResult.value
+              : null;
+          const codexCatalogSessions = Array.isArray(codexCatalogPage?.data)
+            ? codexCatalogPage.data
+                .filter(
+                  (entry) =>
+                    entry &&
+                    typeof entry === "object" &&
+                    !hiddenSharedBindingIds.has(
+                      String((entry as { sessionId?: unknown }).sessionId ?? ""),
+                    ),
+                )
+                .map((entry) => {
+                  const session = entry as {
+                    sessionId?: unknown;
+                    title?: unknown;
+                    updatedAt?: unknown;
+                    sizeBytes?: unknown;
+                    source?: unknown;
+                    provider?: unknown;
+                    sourceLabel?: unknown;
+                  };
+                  return {
+                    sessionId: String(session.sessionId ?? "").trim(),
+                    title: String(session.title ?? "").trim(),
+                    updatedAt:
+                      typeof session.updatedAt === "number" && Number.isFinite(session.updatedAt)
+                        ? session.updatedAt
+                        : 0,
+                    sizeBytes:
+                      typeof session.sizeBytes === "number" && Number.isFinite(session.sizeBytes)
+                        ? session.sizeBytes
+                        : undefined,
+                    source:
+                      typeof session.source === "string" || session.source == null
+                        ? session.source ?? null
+                        : null,
+                    provider:
+                      typeof session.provider === "string" || session.provider == null
+                        ? session.provider ?? null
+                        : null,
+                    sourceLabel:
+                      typeof session.sourceLabel === "string" || session.sourceLabel == null
+                        ? session.sourceLabel ?? null
+                        : null,
+                  };
+                })
+                .filter((entry) => entry.sessionId.length > 0)
+            : [];
+          allSummaries = mergeCodexCatalogSessionSummaries(
+            Array.from(mergedById.values()).sort((a, b) => b.updatedAt - a.updatedAt),
+            codexCatalogSessions,
+            workspace.id,
+            mappedTitles,
+            getCustomName,
+          );
+          mergedById.clear();
+          allSummaries.forEach((entry) => mergedById.set(entry.id, entry));
         }
         if (!includeOpenCodeSessions) {
           existingThreads.forEach((thread) => {

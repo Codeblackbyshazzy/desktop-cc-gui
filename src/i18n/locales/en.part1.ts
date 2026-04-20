@@ -909,6 +909,13 @@ const enPart1 = {
       'The current filter is "{{status}}". The sidebar only shows active, unarchived sessions, so its count can be smaller.',
     sessionManagementProjectScopeHint:
       "This project view aggregates the selected workspace and its {{count}} worktrees. The sidebar splits them by workspace.",
+    sessionManagementFilteredTotalCount: "{{count}} in filtered total",
+    sessionManagementCurrentPageCount: "{{count}} on this page",
+    sessionManagementVisibleWindowHint:
+      "Only {{visible}} sessions are loaded on this page, while the filtered project total is {{total}}.",
+    sessionManagementActiveProjectionScopeHint:
+      "The default active projection currently spans {{count}} workspaces and {{active}} active sessions.",
+    sessionManagementProjectionLoading: "Syncing shared project projection...",
     sessionManagementArchiveSelected: "Archive selected",
     sessionManagementUnarchiveSelected: "Unarchive selected",
     sessionManagementArchiveSuccess: "Archived {{count}} sessions.",

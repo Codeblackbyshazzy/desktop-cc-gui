@@ -33,6 +33,16 @@ export interface WorkspaceSessionCatalogPage {
   partialSource?: string | null;
 }
 
+export interface WorkspaceSessionProjectionSummary {
+  scopeKind: "project" | "worktree";
+  ownerWorkspaceIds: string[];
+  activeTotal: number;
+  archivedTotal: number;
+  allTotal: number;
+  filteredTotal: number;
+  partialSources?: string[];
+}
+
 export interface WorkspaceSessionBatchMutationResult {
   sessionId: string;
   ok: boolean;
@@ -86,6 +96,18 @@ export async function listProjectRelatedCodexSessions(
     query: options?.query ?? null,
     cursor: options?.cursor ?? null,
     limit: options?.limit ?? null,
+  });
+}
+
+export async function getWorkspaceSessionProjectionSummary(
+  workspaceId: string,
+  options?: {
+    query?: WorkspaceSessionCatalogQuery | null;
+  },
+): Promise<WorkspaceSessionProjectionSummary> {
+  return invoke<WorkspaceSessionProjectionSummary>("get_workspace_session_projection_summary", {
+    workspaceId,
+    query: options?.query ?? null,
   });
 }
 

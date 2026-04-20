@@ -919,6 +919,13 @@ const zhPart1 = {
       "当前筛选为“{{status}}”；侧边栏默认只显示活跃且未归档的会话，所以数量可能更少。",
     sessionManagementProjectScopeHint:
       "当前项目视图会聚合这个项目以及它的 {{count}} 个 worktree；侧边栏会按 workspace 分开展示。",
+    sessionManagementFilteredTotalCount: "筛选后共 {{count}} 条",
+    sessionManagementCurrentPageCount: "当前页 {{count}} 条",
+    sessionManagementVisibleWindowHint:
+      "当前页只加载了 {{visible}} 条，但这个筛选条件下的项目总量是 {{total}} 条。",
+    sessionManagementActiveProjectionScopeHint:
+      "默认 active projection 当前覆盖 {{count}} 个 workspace，共 {{active}} 条活跃会话。",
+    sessionManagementProjectionLoading: "正在同步共享项目投影...",
     sessionManagementArchiveSelected: "归档已选",
     sessionManagementUnarchiveSelected: "取消归档",
     sessionManagementArchiveSuccess: "已归档 {{count}} 条会话。",

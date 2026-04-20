@@ -69,6 +69,7 @@ import { useWorktreePrompt } from "./features/workspaces/hooks/useWorktreePrompt
 import { useClonePrompt } from "./features/workspaces/hooks/useClonePrompt";
 import { useWorkspaceController } from "./features/app/hooks/useWorkspaceController";
 import { useWorkspaceSelection } from "./features/workspaces/hooks/useWorkspaceSelection";
+import { useWorkspaceSessionProjectionSummary } from "./features/workspaces/hooks/useWorkspaceSessionProjectionSummary";
 import { useWorkspaceSessionActivity } from "./features/session-activity/hooks/useWorkspaceSessionActivity";
 import { useSessionRadarFeed } from "./features/session-activity/hooks/useSessionRadarFeed";
 import { useLiveEditPreview } from "./features/live-edit-preview/hooks/useLiveEditPreview";
@@ -78,7 +79,6 @@ import { usePersistComposerSettings } from "./features/app/hooks/usePersistCompo
 import { useSyncSelectedDiffPath } from "./features/app/hooks/useSyncSelectedDiffPath";
 import { useMenuAcceleratorController } from "./features/app/hooks/useMenuAcceleratorController";
 import { useAppMenuEvents } from "./features/app/hooks/useAppMenuEvents";
-import { shouldSkipWorkspaceThreadListLoad } from "./app-shell-parts/workspaceThreadListLoadGuard";
 import { useWorkspaceActions } from "./features/app/hooks/useWorkspaceActions";
 import { useWorkspaceCycling } from "./features/app/hooks/useWorkspaceCycling";
 import { useThreadRows } from "./features/app/hooks/useThreadRows";
@@ -173,6 +173,7 @@ import { useAppShellSearchAndComposerSection } from "./app-shell-parts/useAppShe
 import { useAppShellSections } from "./app-shell-parts/useAppShellSections";
 import { useAppShellLayoutNodesSection } from "./app-shell-parts/useAppShellLayoutNodesSection";
 import { renderAppShell } from "./app-shell-parts/renderAppShell";
+import { useWorkspaceThreadListHydration } from "./app-shell-parts/useWorkspaceThreadListHydration";
 import {
   getEffectiveModels,
   getEffectiveReasoningSupported,
@@ -1310,73 +1311,6 @@ export function AppShell() {
       sendUserMessage,
     ],
   );
-  const hydratedThreadListWorkspaceIdsRef = useRef(new Set<string>());
-  const listThreadsForWorkspaceTracked = useCallback(
-    async (
-      workspace: WorkspaceInfo,
-      options?: {
-        preserveState?: boolean;
-        includeOpenCodeSessions?: boolean;
-      },
-    ) => {
-      await listThreadsForWorkspace(workspace, options);
-      hydratedThreadListWorkspaceIdsRef.current.add(workspace.id);
-    },
-    [listThreadsForWorkspace],
-  );
-  const ensureWorkspaceThreadListLoaded = useCallback(
-    (
-      workspaceId: string,
-      options?: { preserveState?: boolean; force?: boolean },
-    ) => {
-      const workspace = workspacesById.get(workspaceId);
-      if (!workspace) {
-        return;
-      }
-      const force = options?.force ?? false;
-      const isLoading = threadListLoadingByWorkspace[workspaceId] ?? false;
-      const hasHydratedThreadList =
-        hydratedThreadListWorkspaceIdsRef.current.has(workspaceId);
-      if (
-        shouldSkipWorkspaceThreadListLoad({
-          force,
-          isLoading,
-          hasHydratedThreadList,
-        })
-      ) {
-        return;
-      }
-      void listThreadsForWorkspaceTracked(workspace, {
-        preserveState: options?.preserveState,
-      });
-    },
-    [
-      listThreadsForWorkspaceTracked,
-      threadListLoadingByWorkspace,
-      workspacesById,
-    ],
-  );
-  const autoHydratedActiveWorkspaceIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!activeWorkspaceId) {
-      autoHydratedActiveWorkspaceIdRef.current = null;
-      return;
-    }
-    if (autoHydratedActiveWorkspaceIdRef.current === activeWorkspaceId) {
-      return;
-    }
-    autoHydratedActiveWorkspaceIdRef.current = activeWorkspaceId;
-    ensureWorkspaceThreadListLoaded(activeWorkspaceId, { preserveState: true });
-  }, [activeWorkspaceId, ensureWorkspaceThreadListLoaded]);
-  const handleEnsureWorkspaceThreadsForSettings = useCallback(
-    (workspaceId: string) => {
-      ensureWorkspaceThreadListLoaded(workspaceId, {
-        preserveState: false,
-        force: true,
-      });
-    },
-    [ensureWorkspaceThreadListLoaded],
-  );
   const {
     activeAccount,
     accountSwitching,
@@ -2113,9 +2047,50 @@ export function AppShell() {
     () => (activePath ? kanbanTasks.filter((task) => task.workspaceId === activePath) : []),
     [activePath, kanbanTasks],
   );
+  const activeProjectionSummaryQuery = useMemo(
+    () => ({ status: "active" as const }),
+    [],
+  );
+  const { summary: activeWorkspaceProjectionSummary } = useWorkspaceSessionProjectionSummary({
+    workspaceId: activeWorkspaceId,
+    query: activeProjectionSummaryQuery,
+    enabled: Boolean(activeWorkspaceId),
+  });
+  const activeWorkspaceProjectionOwnerIds = useMemo(() => {
+    if (!activeWorkspaceId) {
+      return [] as string[];
+    }
+    const ownerWorkspaceIds = activeWorkspaceProjectionSummary?.ownerWorkspaceIds ?? [];
+    if (ownerWorkspaceIds.length === 0) {
+      return [activeWorkspaceId];
+    }
+    return ownerWorkspaceIds;
+  }, [activeWorkspaceId, activeWorkspaceProjectionSummary?.ownerWorkspaceIds]);
+  const {
+    ensureWorkspaceThreadListLoaded,
+    hydratedThreadListWorkspaceIdsRef,
+    listThreadsForWorkspaceTracked,
+  } = useWorkspaceThreadListHydration({
+    activeWorkspaceId,
+    activeWorkspaceProjectionOwnerIds,
+    listThreadsForWorkspace,
+    threadListLoadingByWorkspace,
+    workspaces,
+    workspacesById,
+  });
+  const handleEnsureWorkspaceThreadsForSettings = useCallback(
+    (workspaceId: string) => {
+      ensureWorkspaceThreadListLoaded(workspaceId, {
+        preserveState: false,
+        force: true,
+      });
+    },
+    [ensureWorkspaceThreadListLoaded],
+  );
   const activeWorkspaceThreads = useMemo(
-    () => (activeWorkspaceId ? threadsByWorkspace[activeWorkspaceId] ?? [] : []),
-    [activeWorkspaceId, threadsByWorkspace],
+    () =>
+      activeWorkspaceProjectionOwnerIds.flatMap((workspaceId) => threadsByWorkspace[workspaceId] ?? []),
+    [activeWorkspaceProjectionOwnerIds, threadsByWorkspace],
   );
   const workspaceActivity = useWorkspaceSessionActivity({
     activeThreadId,
@@ -2126,21 +2101,26 @@ export function AppShell() {
   });
   const RECENT_THREAD_LIMIT = 8;
   const recentThreads = useMemo(() => {
-    if (!activeWorkspaceId) {
+    if (!activeWorkspaceId || activeWorkspaceProjectionOwnerIds.length === 0) {
       return [];
     }
-    const threads = threadsByWorkspace[activeWorkspaceId] ?? [];
+    const threads = activeWorkspaceProjectionOwnerIds.flatMap((workspaceId) =>
+      (threadsByWorkspace[workspaceId] ?? []).map((thread) => ({
+        thread,
+        ownerWorkspaceId: workspaceId,
+      })),
+    );
     if (threads.length === 0) {
       return [];
     }
     return [...threads]
-      .sort((left, right) => right.updatedAt - left.updatedAt)
+      .sort((left, right) => right.thread.updatedAt - left.thread.updatedAt)
       .slice(0, RECENT_THREAD_LIMIT)
-      .map((thread) => {
+      .map(({ thread, ownerWorkspaceId }) => {
         const status = threadStatusById[thread.id];
         return {
           id: thread.id,
-          workspaceId: activeWorkspaceId,
+          workspaceId: ownerWorkspaceId,
           threadId: thread.id,
           title: thread.name?.trim() || t("threads.untitledThread"),
           updatedAt: thread.updatedAt,
@@ -2148,7 +2128,7 @@ export function AppShell() {
           isReviewing: status?.isReviewing ?? false,
         };
       });
-  }, [activeWorkspaceId, threadStatusById, threadsByWorkspace, t]);
+  }, [activeWorkspaceId, activeWorkspaceProjectionOwnerIds, threadStatusById, threadsByWorkspace, t]);
   useEffect(() => {
     if (!activeWorkspaceId) {
       return;

@@ -80,6 +80,26 @@ pub(crate) struct WorkspaceSessionCatalogPage {
     pub(crate) partial_source: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum WorkspaceSessionProjectionScopeKind {
+    Project,
+    Worktree,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkspaceSessionProjectionSummary {
+    pub(crate) scope_kind: WorkspaceSessionProjectionScopeKind,
+    pub(crate) owner_workspace_ids: Vec<String>,
+    pub(crate) active_total: usize,
+    pub(crate) archived_total: usize,
+    pub(crate) all_total: usize,
+    pub(crate) filtered_total: usize,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) partial_sources: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WorkspaceSessionBatchMutationResult {
@@ -104,6 +124,22 @@ pub(crate) struct WorkspaceSessionBatchMutationResponse {
 struct WorkspaceSessionCatalogMetadata {
     #[serde(default)]
     archived_at_by_session_id: HashMap<String, i64>,
+}
+
+#[derive(Debug, Clone)]
+struct WorkspaceScopeCatalogData {
+    scope_kind: WorkspaceSessionProjectionScopeKind,
+    owner_workspace_ids: Vec<String>,
+    entries: Vec<WorkspaceSessionCatalogEntry>,
+    partial_sources: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SessionCatalogCountSummary {
+    active_total: usize,
+    archived_total: usize,
+    all_total: usize,
+    filtered_total: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -238,6 +274,22 @@ pub(crate) async fn list_project_related_codex_sessions(
 }
 
 #[tauri::command]
+pub(crate) async fn get_workspace_session_projection_summary(
+    workspace_id: String,
+    query: Option<WorkspaceSessionCatalogQuery>,
+    state: State<'_, AppState>,
+) -> Result<WorkspaceSessionProjectionSummary, String> {
+    get_workspace_session_projection_summary_core(
+        &state.workspaces,
+        &state.engine_manager,
+        state.storage_path.as_path(),
+        workspace_id,
+        query,
+    )
+    .await
+}
+
+#[tauri::command]
 pub(crate) async fn archive_workspace_sessions(
     workspace_id: String,
     session_ids: Vec<String>,
@@ -296,235 +348,40 @@ pub(crate) async fn list_workspace_sessions_core(
     limit: Option<u32>,
 ) -> Result<WorkspaceSessionCatalogPage, String> {
     let workspace_id = normalize_workspace_id(&workspace_id)?;
-    let workspace_scope = catalog_workspace_scope(workspaces, &workspace_id).await?;
-    let metadata_by_workspace_id = read_catalog_metadata_for_scope(storage_path, &workspace_scope)?;
-    let mut partial_sources = Vec::new();
-    let mut entries = Vec::new();
-
-    let gemini_config = engine_manager
-        .get_engine_config(engine::EngineType::Gemini)
-        .await;
-    for workspace in &workspace_scope {
-        let owner_workspace_id = workspace.id.clone();
-        let owner_workspace_path = PathBuf::from(&workspace.path);
-        let owner_metadata = metadata_by_workspace_id
-            .get(&owner_workspace_id)
-            .cloned()
-            .unwrap_or_default();
-
-        match local_usage::list_codex_session_summaries_for_workspace(
-            workspaces,
-            &owner_workspace_id,
-            usize::MAX,
-        )
-        .await
-        {
-            Ok((_, sessions)) => {
-                entries.extend(sessions.into_iter().map(|summary| {
-                    let session_id = summary.session_id.clone();
-                    let archived_at = owner_metadata
-                        .archived_at_by_session_id
-                        .get(&session_id)
-                        .copied();
-                    let source_label =
-                        build_source_label(summary.source.as_deref(), summary.provider.as_deref());
-                    WorkspaceSessionCatalogEntry {
-                        session_id,
-                        canonical_session_id: Some(summary.session_id.clone()),
-                        workspace_id: owner_workspace_id.clone(),
-                        workspace_label: Some(workspace.name.clone()),
-                        engine: "codex".to_string(),
-                        title: summary
-                            .summary
-                            .unwrap_or_else(|| "Codex Session".to_string()),
-                        updated_at: summary.timestamp.max(0),
-                        archived_at,
-                        thread_kind: "native".to_string(),
-                        source: summary.source,
-                        source_label,
-                        size_bytes: summary.file_size_bytes,
-                        cwd: summary.cwd,
-                        attribution_status: Some(
-                            SessionCatalogAttributionStatus::StrictMatch
-                                .as_str()
-                                .to_string(),
-                        ),
-                        attribution_reason: None,
-                        attribution_confidence: None,
-                        matched_workspace_id: Some(owner_workspace_id.clone()),
-                        matched_workspace_label: Some(workspace.name.clone()),
-                    }
-                }));
-            }
-            Err(error) => {
-                log::warn!(
-                    "[session_management.list_workspace_sessions] codex history unavailable for workspace {}: {}",
-                    owner_workspace_id,
-                    error
-                );
-                partial_sources.push(SESSION_CATALOG_PARTIAL_CODEX.to_string());
-            }
-        }
-
-        match engine::claude_history::list_claude_sessions(&owner_workspace_path, None).await {
-            Ok(claude_sessions) => {
-                entries.extend(claude_sessions.into_iter().map(|session| {
-                    let session_id = format!("claude:{}", session.session_id);
-                    WorkspaceSessionCatalogEntry {
-                        archived_at: owner_metadata
-                            .archived_at_by_session_id
-                            .get(&session_id)
-                            .copied(),
-                        session_id,
-                        canonical_session_id: Some(session.session_id.clone()),
-                        workspace_id: owner_workspace_id.clone(),
-                        workspace_label: Some(workspace.name.clone()),
-                        engine: "claude".to_string(),
-                        title: session.first_message,
-                        updated_at: session.updated_at.max(0),
-                        thread_kind: "native".to_string(),
-                        source: None,
-                        source_label: None,
-                        size_bytes: session.file_size_bytes,
-                        cwd: None,
-                        attribution_status: Some(
-                            SessionCatalogAttributionStatus::StrictMatch
-                                .as_str()
-                                .to_string(),
-                        ),
-                        attribution_reason: None,
-                        attribution_confidence: None,
-                        matched_workspace_id: Some(owner_workspace_id.clone()),
-                        matched_workspace_label: Some(workspace.name.clone()),
-                    }
-                }));
-            }
-            Err(error) => {
-                log::warn!(
-                    "[session_management.list_workspace_sessions] claude history unavailable for workspace {}: {}",
-                    owner_workspace_id,
-                    error
-                );
-                partial_sources.push(SESSION_CATALOG_PARTIAL_CLAUDE.to_string());
-            }
-        }
-
-        match engine::gemini_history::list_gemini_sessions(
-            &owner_workspace_path,
-            None,
-            gemini_config
-                .as_ref()
-                .and_then(|item| item.home_dir.as_deref()),
-        )
-        .await
-        {
-            Ok(gemini_sessions) => {
-                entries.extend(gemini_sessions.into_iter().map(|session| {
-                    let session_id = format!("gemini:{}", session.session_id);
-                    WorkspaceSessionCatalogEntry {
-                        archived_at: owner_metadata
-                            .archived_at_by_session_id
-                            .get(&session_id)
-                            .copied(),
-                        session_id,
-                        canonical_session_id: Some(session.session_id.clone()),
-                        workspace_id: owner_workspace_id.clone(),
-                        workspace_label: Some(workspace.name.clone()),
-                        engine: "gemini".to_string(),
-                        title: session.first_message,
-                        updated_at: session.updated_at.max(0),
-                        thread_kind: "native".to_string(),
-                        source: None,
-                        source_label: None,
-                        size_bytes: session.file_size_bytes,
-                        cwd: None,
-                        attribution_status: Some(
-                            SessionCatalogAttributionStatus::StrictMatch
-                                .as_str()
-                                .to_string(),
-                        ),
-                        attribution_reason: None,
-                        attribution_confidence: None,
-                        matched_workspace_id: Some(owner_workspace_id.clone()),
-                        matched_workspace_label: Some(workspace.name.clone()),
-                    }
-                }));
-            }
-            Err(error) => {
-                log::warn!(
-                    "[session_management.list_workspace_sessions] gemini history unavailable for workspace {}: {}",
-                    owner_workspace_id,
-                    error
-                );
-                partial_sources.push(SESSION_CATALOG_PARTIAL_GEMINI.to_string());
-            }
-        }
-
-        match engine::commands::opencode_session_list_core(
-            workspaces,
-            engine_manager,
-            &owner_workspace_id,
-        )
-        .await
-        {
-            Ok(opencode_sessions) => {
-                entries.extend(opencode_sessions.into_iter().map(|session| {
-                    let session_id = format!("opencode:{}", session.session_id);
-                    WorkspaceSessionCatalogEntry {
-                        archived_at: owner_metadata
-                            .archived_at_by_session_id
-                            .get(&session_id)
-                            .copied(),
-                        session_id,
-                        canonical_session_id: Some(session.session_id.clone()),
-                        workspace_id: owner_workspace_id.clone(),
-                        workspace_label: Some(workspace.name.clone()),
-                        engine: "opencode".to_string(),
-                        title: session.title,
-                        updated_at: session.updated_at.unwrap_or(0).max(0),
-                        thread_kind: "native".to_string(),
-                        source: None,
-                        source_label: None,
-                        size_bytes: None,
-                        cwd: None,
-                        attribution_status: Some(
-                            SessionCatalogAttributionStatus::StrictMatch
-                                .as_str()
-                                .to_string(),
-                        ),
-                        attribution_reason: None,
-                        attribution_confidence: None,
-                        matched_workspace_id: Some(owner_workspace_id.clone()),
-                        matched_workspace_label: Some(workspace.name.clone()),
-                    }
-                }));
-            }
-            Err(error) => {
-                log::warn!(
-                    "[session_management.list_workspace_sessions] opencode history unavailable for workspace {}: {}",
-                    owner_workspace_id,
-                    error
-                );
-                partial_sources.push(SESSION_CATALOG_PARTIAL_OPENCODE.to_string());
-            }
-        }
-    }
-
-    let mut deduped = Vec::new();
-    let mut seen_ids = HashSet::new();
-    for entry in entries {
-        if !seen_ids.insert(build_catalog_entry_dedupe_key(&entry)) {
-            continue;
-        }
-        deduped.push(entry);
-    }
+    let scope_catalog =
+        build_workspace_scope_catalog_data(workspaces, engine_manager, storage_path, &workspace_id)
+            .await?;
     Ok(build_catalog_page(
-        deduped,
+        scope_catalog.entries,
         query.unwrap_or_default(),
         cursor,
         limit,
-        join_partial_sources(partial_sources),
+        join_partial_sources(scope_catalog.partial_sources),
     ))
+}
+
+pub(crate) async fn get_workspace_session_projection_summary_core(
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    engine_manager: &engine::EngineManager,
+    storage_path: &Path,
+    workspace_id: String,
+    query: Option<WorkspaceSessionCatalogQuery>,
+) -> Result<WorkspaceSessionProjectionSummary, String> {
+    let workspace_id = normalize_workspace_id(&workspace_id)?;
+    let scope_catalog =
+        build_workspace_scope_catalog_data(workspaces, engine_manager, storage_path, &workspace_id)
+            .await?;
+    let normalized_query = query.unwrap_or_default();
+    let counts = build_catalog_count_summary(&scope_catalog.entries, &normalized_query);
+    Ok(WorkspaceSessionProjectionSummary {
+        scope_kind: scope_catalog.scope_kind,
+        owner_workspace_ids: scope_catalog.owner_workspace_ids,
+        active_total: counts.active_total,
+        archived_total: counts.archived_total,
+        all_total: counts.all_total,
+        filtered_total: counts.filtered_total,
+        partial_sources: scope_catalog.partial_sources,
+    })
 }
 
 pub(crate) async fn list_global_codex_sessions_core(
@@ -1068,14 +925,27 @@ fn now_millis() -> i64 {
 }
 
 fn join_partial_sources(partial_sources: Vec<String>) -> Option<String> {
-    let mut deduped = partial_sources;
-    deduped.sort();
-    deduped.dedup();
+    let deduped = normalize_partial_sources(partial_sources);
     if deduped.is_empty() {
         None
     } else {
         Some(deduped.join(","))
     }
+}
+
+fn normalize_partial_sources(partial_sources: Vec<String>) -> Vec<String> {
+    let mut deduped = Vec::new();
+    let mut seen = HashSet::new();
+    for partial_source in partial_sources {
+        let normalized = partial_source.trim();
+        if normalized.is_empty() {
+            continue;
+        }
+        if seen.insert(normalized.to_string()) {
+            deduped.push(normalized.to_string());
+        }
+    }
+    deduped
 }
 
 async fn build_global_codex_catalog_entries(
@@ -1311,6 +1181,76 @@ fn entry_matches_keyword(entry: &WorkspaceSessionCatalogEntry, keyword: &str) ->
         || workspace_label.contains(keyword)
 }
 
+fn entry_matches_engine_and_keyword(
+    entry: &WorkspaceSessionCatalogEntry,
+    engine_filter: Option<&str>,
+    keyword: Option<&str>,
+) -> bool {
+    if let Some(filter) = engine_filter {
+        if entry.engine != filter {
+            return false;
+        }
+    }
+    if let Some(keyword) = keyword {
+        return entry_matches_keyword(entry, keyword);
+    }
+    true
+}
+
+fn entry_matches_status(
+    entry: &WorkspaceSessionCatalogEntry,
+    status_filter: SessionCatalogStatusFilter,
+) -> bool {
+    match status_filter {
+        SessionCatalogStatusFilter::Active => entry.archived_at.is_none(),
+        SessionCatalogStatusFilter::Archived => entry.archived_at.is_some(),
+        SessionCatalogStatusFilter::All => true,
+    }
+}
+
+fn build_catalog_count_summary(
+    entries: &[WorkspaceSessionCatalogEntry],
+    query: &WorkspaceSessionCatalogQuery,
+) -> SessionCatalogCountSummary {
+    let status_filter = parse_status_filter(query.status.as_deref());
+    let keyword = query
+        .keyword
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_lowercase());
+    let engine_filter = query
+        .engine
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_lowercase());
+
+    let mut counts = SessionCatalogCountSummary {
+        active_total: 0,
+        archived_total: 0,
+        all_total: 0,
+        filtered_total: 0,
+    };
+
+    for entry in entries {
+        if !entry_matches_engine_and_keyword(entry, engine_filter.as_deref(), keyword.as_deref()) {
+            continue;
+        }
+        counts.all_total += 1;
+        if entry.archived_at.is_some() {
+            counts.archived_total += 1;
+        } else {
+            counts.active_total += 1;
+        }
+        if entry_matches_status(entry, status_filter) {
+            counts.filtered_total += 1;
+        }
+    }
+
+    counts
+}
+
 fn build_catalog_page(
     entries: Vec<WorkspaceSessionCatalogEntry>,
     query: WorkspaceSessionCatalogQuery,
@@ -1335,22 +1275,8 @@ fn build_catalog_page(
     let mut filtered: Vec<WorkspaceSessionCatalogEntry> = entries
         .into_iter()
         .filter(|entry| {
-            if let Some(filter) = engine_filter.as_deref() {
-                if entry.engine != filter {
-                    return false;
-                }
-            }
-            match status_filter {
-                SessionCatalogStatusFilter::Active if entry.archived_at.is_some() => return false,
-                SessionCatalogStatusFilter::Archived if entry.archived_at.is_none() => {
-                    return false
-                }
-                _ => {}
-            }
-            if let Some(keyword) = keyword.as_deref() {
-                return entry_matches_keyword(entry, keyword);
-            }
-            true
+            entry_matches_engine_and_keyword(entry, engine_filter.as_deref(), keyword.as_deref())
+                && entry_matches_status(entry, status_filter)
         })
         .collect();
 
@@ -1379,6 +1305,257 @@ fn build_catalog_page(
         next_cursor,
         partial_source,
     }
+}
+
+async fn build_workspace_scope_catalog_data(
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    engine_manager: &engine::EngineManager,
+    storage_path: &Path,
+    workspace_id: &str,
+) -> Result<WorkspaceScopeCatalogData, String> {
+    let workspace_scope = catalog_workspace_scope(workspaces, workspace_id).await?;
+    let metadata_by_workspace_id = read_catalog_metadata_for_scope(storage_path, &workspace_scope)?;
+    let mut partial_sources = Vec::new();
+    let mut entries = Vec::new();
+    let scope_kind = workspace_scope
+        .first()
+        .map(|workspace| {
+            if workspace.kind.is_worktree() {
+                WorkspaceSessionProjectionScopeKind::Worktree
+            } else {
+                WorkspaceSessionProjectionScopeKind::Project
+            }
+        })
+        .unwrap_or(WorkspaceSessionProjectionScopeKind::Project);
+    let owner_workspace_ids = workspace_scope
+        .iter()
+        .map(|workspace| workspace.id.clone())
+        .collect::<Vec<_>>();
+
+    let gemini_config = engine_manager
+        .get_engine_config(engine::EngineType::Gemini)
+        .await;
+    for workspace in &workspace_scope {
+        let owner_workspace_id = workspace.id.clone();
+        let owner_workspace_path = PathBuf::from(&workspace.path);
+        let owner_metadata = metadata_by_workspace_id
+            .get(&owner_workspace_id)
+            .cloned()
+            .unwrap_or_default();
+
+        match local_usage::list_codex_session_summaries_for_workspace(
+            workspaces,
+            &owner_workspace_id,
+            usize::MAX,
+        )
+        .await
+        {
+            Ok((_, sessions)) => {
+                entries.extend(sessions.into_iter().map(|summary| {
+                    let session_id = summary.session_id.clone();
+                    let archived_at = owner_metadata
+                        .archived_at_by_session_id
+                        .get(&session_id)
+                        .copied();
+                    let source_label =
+                        build_source_label(summary.source.as_deref(), summary.provider.as_deref());
+                    WorkspaceSessionCatalogEntry {
+                        session_id,
+                        canonical_session_id: Some(summary.session_id.clone()),
+                        workspace_id: owner_workspace_id.clone(),
+                        workspace_label: Some(workspace.name.clone()),
+                        engine: "codex".to_string(),
+                        title: summary
+                            .summary
+                            .unwrap_or_else(|| "Codex Session".to_string()),
+                        updated_at: summary.timestamp.max(0),
+                        archived_at,
+                        thread_kind: "native".to_string(),
+                        source: summary.source,
+                        source_label,
+                        size_bytes: summary.file_size_bytes,
+                        cwd: summary.cwd,
+                        attribution_status: Some(
+                            SessionCatalogAttributionStatus::StrictMatch
+                                .as_str()
+                                .to_string(),
+                        ),
+                        attribution_reason: None,
+                        attribution_confidence: None,
+                        matched_workspace_id: Some(owner_workspace_id.clone()),
+                        matched_workspace_label: Some(workspace.name.clone()),
+                    }
+                }));
+            }
+            Err(error) => {
+                log::warn!(
+                    "[session_management.list_workspace_sessions] codex history unavailable for workspace {}: {}",
+                    owner_workspace_id,
+                    error
+                );
+                partial_sources.push(SESSION_CATALOG_PARTIAL_CODEX.to_string());
+            }
+        }
+
+        match engine::claude_history::list_claude_sessions(&owner_workspace_path, None).await {
+            Ok(claude_sessions) => {
+                entries.extend(claude_sessions.into_iter().map(|session| {
+                    let session_id = format!("claude:{}", session.session_id);
+                    WorkspaceSessionCatalogEntry {
+                        archived_at: owner_metadata
+                            .archived_at_by_session_id
+                            .get(&session_id)
+                            .copied(),
+                        session_id,
+                        canonical_session_id: Some(session.session_id.clone()),
+                        workspace_id: owner_workspace_id.clone(),
+                        workspace_label: Some(workspace.name.clone()),
+                        engine: "claude".to_string(),
+                        title: session.first_message,
+                        updated_at: session.updated_at.max(0),
+                        thread_kind: "native".to_string(),
+                        source: None,
+                        source_label: None,
+                        size_bytes: session.file_size_bytes,
+                        cwd: None,
+                        attribution_status: Some(
+                            SessionCatalogAttributionStatus::StrictMatch
+                                .as_str()
+                                .to_string(),
+                        ),
+                        attribution_reason: None,
+                        attribution_confidence: None,
+                        matched_workspace_id: Some(owner_workspace_id.clone()),
+                        matched_workspace_label: Some(workspace.name.clone()),
+                    }
+                }));
+            }
+            Err(error) => {
+                log::warn!(
+                    "[session_management.list_workspace_sessions] claude history unavailable for workspace {}: {}",
+                    owner_workspace_id,
+                    error
+                );
+                partial_sources.push(SESSION_CATALOG_PARTIAL_CLAUDE.to_string());
+            }
+        }
+
+        match engine::gemini_history::list_gemini_sessions(
+            &owner_workspace_path,
+            None,
+            gemini_config
+                .as_ref()
+                .and_then(|item| item.home_dir.as_deref()),
+        )
+        .await
+        {
+            Ok(gemini_sessions) => {
+                entries.extend(gemini_sessions.into_iter().map(|session| {
+                    let session_id = format!("gemini:{}", session.session_id);
+                    WorkspaceSessionCatalogEntry {
+                        archived_at: owner_metadata
+                            .archived_at_by_session_id
+                            .get(&session_id)
+                            .copied(),
+                        session_id,
+                        canonical_session_id: Some(session.session_id.clone()),
+                        workspace_id: owner_workspace_id.clone(),
+                        workspace_label: Some(workspace.name.clone()),
+                        engine: "gemini".to_string(),
+                        title: session.first_message,
+                        updated_at: session.updated_at.max(0),
+                        thread_kind: "native".to_string(),
+                        source: None,
+                        source_label: None,
+                        size_bytes: session.file_size_bytes,
+                        cwd: None,
+                        attribution_status: Some(
+                            SessionCatalogAttributionStatus::StrictMatch
+                                .as_str()
+                                .to_string(),
+                        ),
+                        attribution_reason: None,
+                        attribution_confidence: None,
+                        matched_workspace_id: Some(owner_workspace_id.clone()),
+                        matched_workspace_label: Some(workspace.name.clone()),
+                    }
+                }));
+            }
+            Err(error) => {
+                log::warn!(
+                    "[session_management.list_workspace_sessions] gemini history unavailable for workspace {}: {}",
+                    owner_workspace_id,
+                    error
+                );
+                partial_sources.push(SESSION_CATALOG_PARTIAL_GEMINI.to_string());
+            }
+        }
+
+        match engine::commands::opencode_session_list_core(
+            workspaces,
+            engine_manager,
+            &owner_workspace_id,
+        )
+        .await
+        {
+            Ok(opencode_sessions) => {
+                entries.extend(opencode_sessions.into_iter().map(|session| {
+                    let session_id = format!("opencode:{}", session.session_id);
+                    WorkspaceSessionCatalogEntry {
+                        archived_at: owner_metadata
+                            .archived_at_by_session_id
+                            .get(&session_id)
+                            .copied(),
+                        session_id,
+                        canonical_session_id: Some(session.session_id.clone()),
+                        workspace_id: owner_workspace_id.clone(),
+                        workspace_label: Some(workspace.name.clone()),
+                        engine: "opencode".to_string(),
+                        title: session.title,
+                        updated_at: session.updated_at.unwrap_or(0).max(0),
+                        thread_kind: "native".to_string(),
+                        source: None,
+                        source_label: None,
+                        size_bytes: None,
+                        cwd: None,
+                        attribution_status: Some(
+                            SessionCatalogAttributionStatus::StrictMatch
+                                .as_str()
+                                .to_string(),
+                        ),
+                        attribution_reason: None,
+                        attribution_confidence: None,
+                        matched_workspace_id: Some(owner_workspace_id.clone()),
+                        matched_workspace_label: Some(workspace.name.clone()),
+                    }
+                }));
+            }
+            Err(error) => {
+                log::warn!(
+                    "[session_management.list_workspace_sessions] opencode history unavailable for workspace {}: {}",
+                    owner_workspace_id,
+                    error
+                );
+                partial_sources.push(SESSION_CATALOG_PARTIAL_OPENCODE.to_string());
+            }
+        }
+    }
+
+    let mut deduped = Vec::new();
+    let mut seen_ids = HashSet::new();
+    for entry in entries {
+        if !seen_ids.insert(build_catalog_entry_dedupe_key(&entry)) {
+            continue;
+        }
+        deduped.push(entry);
+    }
+
+    Ok(WorkspaceScopeCatalogData {
+        scope_kind,
+        owner_workspace_ids,
+        entries: deduped,
+        partial_sources: normalize_partial_sources(partial_sources),
+    })
 }
 
 #[cfg(test)]
@@ -1618,6 +1795,95 @@ mod tests {
             partial_source,
             Some("codex-history-unavailable,gemini-history-unavailable".to_string())
         );
+    }
+
+    #[test]
+    fn projection_summary_counts_filtered_total_separately_from_status_buckets() {
+        let mut active = catalog_entry("codex:active", "main", Some("Main"), None);
+        active.engine = "codex".to_string();
+        active.title = "Bugfix discussion".to_string();
+
+        let mut archived = catalog_entry("claude:archived", "worktree-a", Some("Worktree"), None);
+        archived.engine = "claude".to_string();
+        archived.title = "Bugfix archive".to_string();
+        archived.archived_at = Some(42);
+
+        let mut other = catalog_entry("gemini:other", "main", Some("Main"), None);
+        other.engine = "gemini".to_string();
+        other.title = "Other topic".to_string();
+
+        let counts = build_catalog_count_summary(
+            &[active, archived, other],
+            &WorkspaceSessionCatalogQuery {
+                keyword: Some("bugfix".to_string()),
+                engine: None,
+                status: Some("active".to_string()),
+            },
+        );
+
+        assert_eq!(
+            counts,
+            SessionCatalogCountSummary {
+                active_total: 1,
+                archived_total: 1,
+                all_total: 2,
+                filtered_total: 1,
+            }
+        );
+    }
+
+    #[test]
+    fn normalize_partial_sources_preserves_first_seen_order() {
+        let partial_sources = normalize_partial_sources(vec![
+            SESSION_CATALOG_PARTIAL_GEMINI.to_string(),
+            SESSION_CATALOG_PARTIAL_CODEX.to_string(),
+            SESSION_CATALOG_PARTIAL_GEMINI.to_string(),
+        ]);
+
+        assert_eq!(
+            partial_sources,
+            vec![
+                SESSION_CATALOG_PARTIAL_GEMINI.to_string(),
+                SESSION_CATALOG_PARTIAL_CODEX.to_string(),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn catalog_workspace_scope_supports_windows_style_paths_without_changing_scope_ids() {
+        let main = workspace_entry(
+            "main",
+            "Main",
+            r"C:\repo\main",
+            WorkspaceKind::Main,
+            None,
+        );
+        let worktree = workspace_entry(
+            "worktree-a",
+            "Worktree A",
+            r"C:\repo\main\.worktrees\a",
+            WorkspaceKind::Worktree,
+            Some("main"),
+        );
+        let unrelated = workspace_entry(
+            "other",
+            "Other",
+            r"D:\repo\other",
+            WorkspaceKind::Main,
+            None,
+        );
+        let workspaces = Mutex::new(HashMap::from([
+            (main.id.clone(), main),
+            (worktree.id.clone(), worktree),
+            (unrelated.id.clone(), unrelated),
+        ]));
+
+        let scope = catalog_workspace_scope(&workspaces, "main")
+            .await
+            .expect("resolve windows scope");
+
+        let ids: Vec<_> = scope.into_iter().map(|entry| entry.id).collect();
+        assert_eq!(ids, vec!["main", "worktree-a"]);
     }
 
     #[test]

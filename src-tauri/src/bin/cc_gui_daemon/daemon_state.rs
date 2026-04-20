@@ -2136,6 +2136,21 @@ impl DaemonState {
         .await
     }
 
+    pub(super) async fn get_workspace_session_projection_summary(
+        &self,
+        workspace_id: String,
+        query: Option<session_management::WorkspaceSessionCatalogQuery>,
+    ) -> Result<session_management::WorkspaceSessionProjectionSummary, String> {
+        session_management::get_workspace_session_projection_summary_core(
+            &self.workspaces,
+            &self.engine_manager,
+            self.storage_path.as_path(),
+            workspace_id,
+            query,
+        )
+        .await
+    }
+
     pub(super) async fn archive_workspace_sessions(
         &self,
         workspace_id: String,

@@ -238,6 +238,7 @@ pub(crate) fn invoke_handler(
         crate::session_management::list_workspace_sessions,
         crate::session_management::list_global_codex_sessions,
         crate::session_management::list_project_related_codex_sessions,
+        crate::session_management::get_workspace_session_projection_summary,
         crate::session_management::archive_workspace_sessions,
         crate::session_management::unarchive_workspace_sessions,
         crate::session_management::delete_workspace_sessions,

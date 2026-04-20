@@ -2517,6 +2517,22 @@ async fn handle_rpc_request(
                 .await?;
             serde_json::to_value(page).map_err(|err| err.to_string())
         }
+        "get_workspace_session_projection_summary" => {
+            let workspace_id = parse_string(&params, "workspaceId")?;
+            let query = parse_optional_value(&params, "query")
+                .filter(|value| !value.is_null())
+                .map(|value| {
+                    serde_json::from_value::<session_management::WorkspaceSessionCatalogQuery>(
+                        value,
+                    )
+                    .map_err(|err| format!("invalid `query`: {err}"))
+                })
+                .transpose()?;
+            let summary = state
+                .get_workspace_session_projection_summary(workspace_id, query)
+                .await?;
+            serde_json::to_value(summary).map_err(|err| err.to_string())
+        }
         "archive_workspace_sessions" => {
             let workspace_id = parse_string(&params, "workspaceId")?;
             let session_ids = parse_string_array(&params, "sessionIds")?;

@@ -27,6 +27,7 @@ import {
   type WorkspaceSessionCatalogMutationResponse,
   type WorkspaceSessionCatalogSource,
 } from "../hooks/useWorkspaceSessionCatalog";
+import { useWorkspaceSessionProjectionSummary } from "../../../../workspaces/hooks/useWorkspaceSessionProjectionSummary";
 import type { WorkspaceSessionCatalogEntry } from "../../../../../services/tauri";
 
 type GroupedWorkspace = {
@@ -340,6 +341,24 @@ export function SessionManagementSection({
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [notice, setNotice] = useState<NoticeState>(null);
   const primarySource: WorkspaceSessionCatalogSource = "strict";
+  const summaryQuery = useMemo(
+    () => ({
+      keyword: filters.keyword,
+      engine: mode === "project" ? filters.engine : "",
+      status: filters.status,
+    }),
+    [filters.engine, filters.keyword, filters.status, mode],
+  );
+  const {
+    summary: projectionSummary,
+    error: projectionSummaryError,
+    isLoading: projectionSummaryLoading,
+    reload: reloadProjectionSummary,
+  } = useWorkspaceSessionProjectionSummary({
+    workspaceId: mode === "project" ? workspaceId : null,
+    query: summaryQuery,
+    enabled: mode === "project" && Boolean(workspaceId),
+  });
   const {
     entries: primaryEntries,
     nextCursor: primaryNextCursor,
@@ -373,6 +392,18 @@ export function SessionManagementSection({
     () => (mode === "global" ? primaryEntries : [...primaryEntries, ...relatedEntries]),
     [mode, primaryEntries, relatedEntries],
   );
+  const visiblePrimaryCount = primaryEntries.length;
+  const filteredTotalCount =
+    mode === "project" ? projectionSummary?.filteredTotal ?? visiblePrimaryCount : primaryEntries.length;
+  const currentPageVisibleCount = visiblePrimaryCount;
+  const activeProjectionOwnerCount = projectionSummary?.ownerWorkspaceIds.length ?? 0;
+  const activeTotalCount = projectionSummary?.activeTotal ?? 0;
+  const summaryPartialSource =
+    projectionSummary?.partialSources && projectionSummary.partialSources.length > 0
+      ? projectionSummary.partialSources.join(",")
+      : null;
+  const primaryPartialSourceNotice =
+    primaryPartialSource && primaryPartialSource !== summaryPartialSource ? primaryPartialSource : null;
 
   const selectedCount = useMemo(() => Object.keys(selectedIds).length, [selectedIds]);
   const allSelected =
@@ -438,7 +469,11 @@ export function SessionManagementSection({
   };
 
   const handleRefresh = async () => {
-    await Promise.all([reloadPrimary(), mode === "project" ? reloadRelated() : Promise.resolve()]);
+    await Promise.all([
+      reloadPrimary(),
+      mode === "project" ? reloadRelated() : Promise.resolve(),
+      mode === "project" && workspaceId ? reloadProjectionSummary() : Promise.resolve(),
+    ]);
     resetSelection();
   };
 
@@ -479,6 +514,8 @@ export function SessionManagementSection({
     mode === "project" && filters.status !== "active";
   const shouldShowProjectScopeHint =
     mode === "project" && projectScopeWorktreeCount > 0;
+  const shouldShowVisibleCountHint =
+    mode === "project" && filteredTotalCount > currentPageVisibleCount;
   const statusFilterLabel = resolveStatusFilterLabel(filters.status, t);
 
   const handleMutation = async (kind: "archive" | "unarchive" | "delete") => {
@@ -529,11 +566,16 @@ export function SessionManagementSection({
       const shouldReloadPrimary = kind !== "delete" || failed.length > 0;
       const shouldReloadRelated =
         mode === "project" && (shouldReloadPrimary || hasSelectedRelatedEntry);
+      const shouldReloadProjectionSummary =
+        mode === "project" && Boolean(workspaceId);
       if (shouldReloadPrimary || shouldReloadRelated) {
         void Promise.all([
           shouldReloadPrimary ? reloadPrimary() : Promise.resolve(),
           shouldReloadRelated ? reloadRelated() : Promise.resolve(),
+          shouldReloadProjectionSummary ? reloadProjectionSummary() : Promise.resolve(),
         ]);
+      } else if (shouldReloadProjectionSummary) {
+        void reloadProjectionSummary();
       }
       const succeededWorkspaceIds = collectSucceededWorkspaceIds(response.results);
       succeededWorkspaceIds.forEach((ownerWorkspaceId) => {
@@ -552,7 +594,7 @@ export function SessionManagementSection({
     }
   };
 
-  const expandCount = mode === "global" ? primaryEntries.length : primaryEntries.length + relatedEntries.length;
+  const expandCount = mode === "global" ? primaryEntries.length : filteredTotalCount;
   const showProjectStrictEmpty =
     mode === "project" && !primaryIsLoading && primaryEntries.length === 0;
   const showRelatedSection =
@@ -711,6 +753,18 @@ export function SessionManagementSection({
             <span className="settings-project-sessions-selected">
               {t("settings.projectSessionSelectedCount", { count: selectedCount })}
             </span>
+            {mode === "project" ? (
+              <span className="settings-project-sessions-selected">
+                {t("settings.sessionManagementFilteredTotalCount", { count: filteredTotalCount })}
+              </span>
+            ) : null}
+            {mode === "project" ? (
+              <span className="settings-project-sessions-selected">
+                {t("settings.sessionManagementCurrentPageCount", {
+                  count: currentPageVisibleCount,
+                })}
+              </span>
+            ) : null}
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
@@ -778,9 +832,40 @@ export function SessionManagementSection({
               })}
             </div>
           ) : null}
-          {primaryPartialSource ? (
+          {shouldShowVisibleCountHint ? (
             <div className="settings-project-sessions-notice">
-              {t("settings.sessionManagementPartialSource", { source: primaryPartialSource })}
+              {t("settings.sessionManagementVisibleWindowHint", {
+                visible: currentPageVisibleCount,
+                total: filteredTotalCount,
+              })}
+            </div>
+          ) : null}
+          {mode === "project" && activeProjectionOwnerCount > 1 ? (
+            <div className="settings-project-sessions-notice">
+              {t("settings.sessionManagementActiveProjectionScopeHint", {
+                count: activeProjectionOwnerCount,
+                active: activeTotalCount,
+              })}
+            </div>
+          ) : null}
+          {projectionSummaryLoading ? (
+            <div className="settings-project-sessions-notice">
+              {t("settings.sessionManagementProjectionLoading")}
+            </div>
+          ) : null}
+          {projectionSummaryError ? (
+            <div className="settings-project-sessions-notice is-error">
+              {projectionSummaryError}
+            </div>
+          ) : null}
+          {summaryPartialSource ? (
+            <div className="settings-project-sessions-notice">
+              {t("settings.sessionManagementPartialSource", { source: summaryPartialSource })}
+            </div>
+          ) : null}
+          {primaryPartialSourceNotice ? (
+            <div className="settings-project-sessions-notice">
+              {t("settings.sessionManagementPartialSource", { source: primaryPartialSourceNotice })}
             </div>
           ) : null}
           {primaryError ? (

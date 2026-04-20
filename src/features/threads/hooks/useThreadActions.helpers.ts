@@ -23,6 +23,16 @@ export type GeminiSessionSummary = {
   fileSizeBytes?: number;
 };
 
+export type CodexCatalogSessionSummary = {
+  sessionId: string;
+  title: string;
+  updatedAt: number;
+  sizeBytes?: number;
+  source?: string | null;
+  provider?: string | null;
+  sourceLabel?: string | null;
+};
+
 export function isWorkspaceNotConnectedError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return message.toLowerCase().includes("workspace not connected");
@@ -367,6 +377,51 @@ export function mergeGeminiSessionSummaries(
     };
     if (!prev || next.updatedAt >= prev.updatedAt) {
       mergedById.set(id, next);
+    }
+  });
+  return Array.from(mergedById.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+export function mergeCodexCatalogSessionSummaries(
+  baseSummaries: ThreadSummary[],
+  codexSessions: CodexCatalogSessionSummary[],
+  workspaceId: string,
+  mappedTitles: Record<string, string>,
+  getCustomName: (workspaceId: string, threadId: string) => string | undefined,
+): ThreadSummary[] {
+  if (codexSessions.length === 0) {
+    return baseSummaries;
+  }
+  const mergedById = new Map<string, ThreadSummary>();
+  baseSummaries.forEach((entry) => mergedById.set(entry.id, entry));
+  codexSessions.forEach((session) => {
+    const title = session.title.trim();
+    if (
+      !title ||
+      CODEX_BACKGROUND_HELPER_PROMPT_PREFIXES.some((prefix) => title.startsWith(prefix))
+    ) {
+      return;
+    }
+    const prev = mergedById.get(session.sessionId);
+    const updatedAt = Number.isFinite(session.updatedAt)
+      ? Math.max(0, session.updatedAt)
+      : 0;
+    const next: ThreadSummary = {
+      id: session.sessionId,
+      name:
+        mappedTitles[session.sessionId] ||
+        getCustomName(workspaceId, session.sessionId) ||
+        previewThreadName(title, "Codex Session"),
+      updatedAt,
+      sizeBytes: session.sizeBytes,
+      engineSource: "codex",
+      threadKind: "native",
+      source: session.source ?? undefined,
+      provider: session.provider ?? undefined,
+      sourceLabel: session.sourceLabel ?? undefined,
+    };
+    if (!prev || next.updatedAt >= prev.updatedAt) {
+      mergedById.set(session.sessionId, next);
     }
   });
   return Array.from(mergedById.values()).sort((a, b) => b.updatedAt - a.updatedAt);

@@ -2063,6 +2063,76 @@ describe("useThreadActions", () => {
     ]);
   });
 
+  it("merges active codex catalog sessions into sidebar threads when live codex list is unavailable", async () => {
+    vi.mocked(listThreads)
+      .mockRejectedValueOnce(new Error("workspace not connected"))
+      .mockRejectedValueOnce(new Error("workspace not connected"));
+    vi.mocked(listClaudeSessions).mockResolvedValue([
+      {
+        sessionId: "claude-fallback-1",
+        firstMessage: "Claude recovered history",
+        updatedAt: 1_730_100_000_000,
+      },
+    ]);
+    vi.mocked(listWorkspaceSessions).mockImplementation(async (_workspaceId, options) => {
+      if (options?.query?.status === "active" && options?.query?.engine === "codex") {
+        return {
+          data: [
+            {
+              sessionId: "codex-history-1",
+              workspaceId: "ws-1",
+              engine: "codex",
+              title: "Generate a concise git commit message for the following changes.",
+              updatedAt: 1_730_200_000_000,
+              archivedAt: null,
+              threadKind: "native",
+              source: "mossx",
+              provider: "openai",
+              sourceLabel: "mossx/openai",
+            },
+          ],
+          nextCursor: null,
+          partialSource: null,
+        };
+      }
+      return {
+        data: [],
+        nextCursor: null,
+        partialSource: null,
+      };
+    });
+    vi.mocked(getOpenCodeSessionList).mockResolvedValue([]);
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+
+    expect(connectWorkspace).toHaveBeenCalledWith("ws-1");
+    expect(listWorkspaceSessions).toHaveBeenCalledWith("ws-1", {
+      query: { status: "active", engine: "codex" },
+      limit: 200,
+    });
+    expectSetThreadsDispatched(dispatch, "ws-1", [
+      {
+        id: "codex-history-1",
+        name: "Generate a concise git commit message for the following changes.",
+        updatedAt: 1_730_200_000_000,
+        engineSource: "codex",
+        source: "mossx",
+        provider: "openai",
+        sourceLabel: "mossx/openai",
+      },
+      {
+        id: "claude:claude-fallback-1",
+        name: "Claude recovered history",
+        updatedAt: 1_730_100_000_000,
+        engineSource: "claude",
+      },
+    ]);
+  });
+
   it("refreshes gemini sessions on cold start without gemini signal", async () => {
     vi.mocked(listThreads).mockResolvedValue({
       result: {

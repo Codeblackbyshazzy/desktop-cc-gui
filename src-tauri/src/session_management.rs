@@ -1851,13 +1851,7 @@ mod tests {
 
     #[tokio::test]
     async fn catalog_workspace_scope_supports_windows_style_paths_without_changing_scope_ids() {
-        let main = workspace_entry(
-            "main",
-            "Main",
-            r"C:\repo\main",
-            WorkspaceKind::Main,
-            None,
-        );
+        let main = workspace_entry("main", "Main", r"C:\repo\main", WorkspaceKind::Main, None);
         let worktree = workspace_entry(
             "worktree-a",
             "Worktree A",

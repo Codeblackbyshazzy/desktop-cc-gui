@@ -63,7 +63,9 @@ import {
 } from "./messagesReasoning";
 import {
   buildRenderedItemsWindow,
+  collapseExpandedExploreItems,
   findLatestOrdinaryUserQuestionId,
+  resolveLiveAutoExpandedExploreId,
 } from "./messagesLiveWindow";
 import {
   isAssistantMessageConversationItem,
@@ -1652,22 +1654,7 @@ export const Messages = memo(function Messages({
     if (isThinking) {
       return;
     }
-    setExpandedItems((prev) => {
-      if (prev.size === 0) {
-        return prev;
-      }
-      const next = new Set(prev);
-      let changed = false;
-      for (const item of effectiveItems) {
-        if (item.kind !== "explore") {
-          continue;
-        }
-        if (next.delete(item.id)) {
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
+    setExpandedItems((prev) => collapseExpandedExploreItems(prev, effectiveItems));
   }, [effectiveItems, isThinking]);
 
   // Auto-expand the latest reasoning block during streaming (synced with idea-claude-code-gui)
@@ -2316,6 +2303,16 @@ export const Messages = memo(function Messages({
   }, [scrollKey, isThinking, isNearBottom, liveAutoFollowEnabled]);
 
   const groupedEntries = useMemo(() => groupToolItems(renderedItems), [renderedItems]);
+  const liveAutoExpandedExploreId = useMemo(
+    () => resolveLiveAutoExpandedExploreId(groupedEntries, isThinking),
+    [groupedEntries, isThinking],
+  );
+  useEffect(() => {
+    if (!isThinking || liveAutoExpandedExploreId !== null) {
+      return;
+    }
+    setExpandedItems((prev) => collapseExpandedExploreItems(prev, effectiveItems));
+  }, [effectiveItems, isThinking, liveAutoExpandedExploreId]);
   const assistantFinalBoundarySet = useMemo(() => {
     const ids = new Set<string>();
     let lastFinalAssistantIdInTurn: string | null = null;
@@ -2620,7 +2617,7 @@ export const Messages = memo(function Messages({
       );
     }
     if (item.kind === "explore") {
-      const isExpanded = isThinking || expandedItems.has(item.id);
+      const isExpanded = liveAutoExpandedExploreId === item.id || expandedItems.has(item.id);
       return (
         <ExploreRow
           key={`explore:${item.id}`}

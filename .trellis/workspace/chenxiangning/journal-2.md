@@ -883,3 +883,50 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 51: OpenSpec runtime stability proposal
+
+**Date**: 2026-04-20
+**Task**: OpenSpec runtime stability proposal
+**Branch**: `feature/vvvv0.4.5`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标: 将 harden-conversation-runtime-stability 这条 OpenSpec change 从分析态推进到可执行态，并单独提交该提案。
+主要改动:
+- 新建 proposal，明确问题归因在 host runtime stability / diagnostics / bounded recovery。
+- 补齐 design，收敛 recovery guard、last-good continuity、structured diagnostics 与 evidence path。
+- 补齐 specs，新增 conversation-runtime-stability capability，并修改 conversation-lifecycle-contract。
+- 补齐 tasks，拆解为 recovery guard、diagnostics、continuity、evidence path、verification 五组实现任务。
+涉及模块:
+- openspec/changes/harden-conversation-runtime-stability/**
+验证结果:
+- openspec status --change harden-conversation-runtime-stability -> 4/4 artifacts complete
+- openspec validate harden-conversation-runtime-stability -> valid
+- git commit: a4148478 docs(openspec): add runtime stability change
+后续事项:
+- 按 tasks.md 优先实现 P0 Runtime Recovery Guard 与 structured diagnostics。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a4148478` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

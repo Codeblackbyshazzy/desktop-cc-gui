@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 51
+- **Total Sessions**: 52
 - **Last Active**: 2026-04-20
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~932 | Active |
+| `journal-2.md` | ~996 | Active |
 | `journal-1.md` | ~1990 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 52 | 2026-04-20 | 对齐工作区会话投影与侧边栏补水 | `15130eb1` | `feature/vvvv0.4.5` |
 | 51 | 2026-04-20 | OpenSpec runtime stability proposal | `a4148478` | `feature/vvvv0.4.5` |
 | 50 | 2026-04-20 | Clarify session management scope hints and preserve commit threads | `1c974f34` | `feature/vvvv0.4.5` |
 | 49 | 2026-04-20 | Hide recent conversations from landing views | `406e26eb` | `feature/vvvv0.4.5` |

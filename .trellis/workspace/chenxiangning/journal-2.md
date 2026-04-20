@@ -930,3 +930,67 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 52: 对齐工作区会话投影与侧边栏补水
+
+**Date**: 2026-04-20
+**Task**: 对齐工作区会话投影与侧边栏补水
+**Branch**: `feature/vvvv0.4.5`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标:
+- 对齐 workspace session catalog projection 在 Session Management、sidebar 与 workspace home 之间的语义口径。
+- 修复非 active workspace 长期停留在旧 sidebar snapshot 的问题。
+- 完成一轮针对边界条件、跨平台兼容和大文件治理的 review，并直接修复发现的问题。
+
+主要改动:
+- Rust backend 新增 workspace session projection summary command，统一 project/worktree scope、filtered total、partial source 等摘要字段。
+- 前端新增 useWorkspaceSessionProjectionSummary 与 useWorkspaceThreadListHydration，补齐 Session Management summary 刷新链路，并让 sidebar 对非 active workspace 做后台顺序补水。
+- 调整 Session Management 文案与统计展示，明确 filtered total、current page visible 与 partial source。
+- 补充 targeted tests，覆盖 stale response、错误路径、跨 workspace mutation 回调、后台补水推进与 Windows 路径场景。
+
+涉及模块:
+- src-tauri/src/session_management.rs
+- src/services/tauri.ts
+- src/services/tauri/sessionManagement.ts
+- src/app-shell.tsx
+- src/app-shell-parts/useWorkspaceThreadListHydration.ts
+- src/features/settings/components/settings-view/sections/SessionManagementSection.tsx
+- src/features/workspaces/hooks/useWorkspaceSessionProjectionSummary.ts
+- openspec/changes/workspace-session-catalog-projection-parity/
+
+验证结果:
+- npx vitest run src/app-shell-parts/workspaceThreadListLoadGuard.test.ts src/app-shell-parts/useWorkspaceThreadListHydration.test.tsx src/features/settings/components/settings-view/sections/SessionManagementSection.test.tsx src/features/workspaces/hooks/useWorkspaceSessionProjectionSummary.test.tsx
+- npx eslint src/app-shell.tsx src/app-shell-parts/workspaceThreadListLoadGuard.ts src/app-shell-parts/workspaceThreadListLoadGuard.test.ts src/app-shell-parts/useWorkspaceThreadListHydration.ts src/app-shell-parts/useWorkspaceThreadListHydration.test.tsx src/features/settings/components/settings-view/sections/SessionManagementSection.tsx src/features/settings/components/settings-view/sections/SessionManagementSection.test.tsx
+- npx tsc --noEmit
+- npm run check:large-files
+- cargo test --manifest-path src-tauri/Cargo.toml session_management -- --nocapture
+
+后续事项:
+- docs/plans/2026-04-20-claude-compact-command-adaptation-implementation.md 与 openspec/changes/claude-code-compact-command-adaptation/ 仍为未跟踪的独立变更，未纳入本次提交。
+- 如需继续降低大文件风险，可优先考虑拆分 src/services/tauri.ts。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `15130eb1` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

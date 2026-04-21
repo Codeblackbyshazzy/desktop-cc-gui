@@ -489,3 +489,69 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 77: 统一 Codex unified_exec 策略与官方配置治理
+
+**Date**: 2026-04-21
+**Task**: 统一 Codex unified_exec 策略与官方配置治理
+**Branch**: `feature/f-v0.4.6`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：
+- 审查并提交 unified_exec 相关未提交改动。
+- 把 Background terminal 从旧 experimental bool 迁移到 tri-state policy，并把官方配置读写入口与普通 settings save 解耦。
+
+主要改动：
+- Rust/TypeScript 两侧新增 codexUnifiedExecPolicy，并兼容迁移 experimentalUnifiedExecEnabled。
+- settings save/restore 不再隐式改写 ~/.codex/config.toml，改为显式 official action lane。
+- 新增 unified_exec external status/restore/set override 的 Tauri command 与 service wrapper。
+- 将 Background terminal 交互迁移到 VendorSettingsPanel，补充 official default、repair CTA、显式操作按钮与确认弹窗。
+- 补充取消确认不写配置、legacy migration、runtime reload 提示等前后端测试。
+- 新增 Trellis contract 文档，固化 unified_exec override contract。
+
+涉及模块：
+- src-tauri/src/settings/**
+- src-tauri/src/codex/**
+- src-tauri/src/types.rs
+- src/services/tauri*.ts
+- src/features/settings/**
+- src/features/vendors/**
+- src/i18n/locales/**
+- .trellis/spec/guides/**
+
+验证结果：
+- npm run check:large-files
+- npm run typecheck
+- npm exec vitest run src/features/settings/hooks/useAppSettings.test.ts src/services/tauri.test.ts src/features/vendors/components/VendorSettingsPanel.test.tsx
+- cargo test --manifest-path src-tauri/Cargo.toml resolves_workspace_codex_args_appends_unified_exec_override
+- cargo test --manifest-path src-tauri/Cargo.toml update_app_settings_core_stops_syncing_unified_exec_to_external_config
+- cargo test --manifest-path src-tauri/Cargo.toml restore_codex_unified_exec_official_default_removes_override
+
+后续事项：
+- 继续按主题提交 messages 吸顶样式拆分。
+- 继续提交 OpenSpec 提案文档，保持本轮未提交改动清零。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c1ad7eb83538ed3162add3e3ac17ed946802955b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

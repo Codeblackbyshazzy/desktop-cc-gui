@@ -133,6 +133,26 @@ function getActiveWorkLabel(
   }
 }
 
+function getRuntimeStartupStateLabel(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  state?: string | null,
+) {
+  switch ((state ?? "").toLowerCase()) {
+    case "starting":
+      return t("settings.runtimeStateStarting");
+    case "ready":
+      return t("settings.runtimeStartupStateReady");
+    case "suspect-stale":
+      return t("settings.runtimeStartupStateSuspectStale");
+    case "cooldown":
+      return t("settings.runtimeStartupStateCooldown");
+    case "quarantined":
+      return t("settings.runtimeStartupStateQuarantined");
+    default:
+      return state ?? "—";
+  }
+}
+
 export function RuntimePoolSection({
   t,
   appSettings,
@@ -665,6 +685,11 @@ export function RuntimePoolSection({
                             {t("settings.runtimePin")}
                           </Badge>
                         ) : null}
+                        {row.hasStoppingPredecessor ? (
+                          <Badge className="h-5.5 rounded-full px-2 text-[10px] dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200" variant="secondary">
+                            {t("settings.runtimeStoppingPredecessorLabel")}
+                          </Badge>
+                        ) : null}
                       </div>
 
                       <div className="grid gap-x-4 gap-y-1.5 text-[12px] leading-5 text-slate-600 dark:text-slate-300/88 lg:grid-cols-2">
@@ -726,6 +751,24 @@ export function RuntimePoolSection({
                           <span className="font-medium text-slate-900 dark:text-slate-100">{t("settings.runtimeBinaryLabel")}</span>{" "}
                           <span className="break-all">{row.resolvedBin ?? "—"}</span>
                         </div>
+                        <div className="min-w-0">
+                          <span className="font-medium text-slate-900 dark:text-slate-100">{t("settings.runtimeStartupStateLabel")}</span>{" "}
+                          {getRuntimeStartupStateLabel(t, row.startupState)}
+                          {row.lastRecoverySource ? ` · ${t("settings.runtimeRecoverySourceLabel")} ${row.lastRecoverySource}` : ""}
+                          {row.lastGuardState ? ` · ${t("settings.runtimeGuardStateLabel")} ${row.lastGuardState}` : ""}
+                        </div>
+                        <div className="min-w-0">
+                          <span className="font-medium text-slate-900 dark:text-slate-100">{t("settings.runtimeRecentChurnLabel")}</span>{" "}
+                          {t("settings.runtimeRecentSpawnCountLabel", {
+                            count: row.recentSpawnCount ?? 0,
+                          })}
+                          {` · ${t("settings.runtimeRecentReplaceCountLabel", {
+                            count: row.recentReplaceCount ?? 0,
+                          })}`}
+                          {` · ${t("settings.runtimeRecentForceKillCountLabel", {
+                            count: row.recentForceKillCount ?? 0,
+                          })}`}
+                        </div>
                       </div>
 
                       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400/90">
@@ -739,7 +782,11 @@ export function RuntimePoolSection({
                         </div>
                       </div>
 
-                      {row.error || row.evictionReason || row.lastExitReasonCode ? (
+                      {row.error
+                      || row.evictionReason
+                      || row.lastExitReasonCode
+                      || row.lastReplaceReason
+                      || row.lastProbeFailure ? (
                         <details className="group rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 dark:border-white/10 dark:bg-slate-900/70">
                           <summary className="cursor-pointer list-none text-[11px] font-medium text-slate-600 outline-none marker:content-none dark:text-slate-300">
                             <span className="inline-flex items-center gap-2">
@@ -785,6 +832,21 @@ export function RuntimePoolSection({
                                   ? ` · ${t("settings.runtimeLastUsedLabel")} ${formatTimestamp(row.lastExitAtMs)}`
                                   : ""}
                               </div>
+                            </div>
+                          ) : null}
+                          {row.lastReplaceReason ? (
+                            <div className="mt-2 rounded-xl border border-violet-200/80 bg-violet-50/85 px-3 py-2 text-[12px] leading-5 text-violet-700 dark:border-violet-500/25 dark:bg-violet-500/10 dark:text-violet-200">
+                              {t("settings.runtimeReplaceReasonLabel")} {row.lastReplaceReason}
+                            </div>
+                          ) : null}
+                          {row.lastProbeFailure ? (
+                            <div className="mt-2 rounded-xl border border-amber-200/80 bg-amber-50/85 px-3 py-2 text-[12px] leading-5 text-amber-700 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-200">
+                              <div>{t("settings.runtimeProbeFailureLabel")} {row.lastProbeFailure}</div>
+                              {row.lastProbeFailureSource ? (
+                                <div className="mt-1">
+                                  {t("settings.runtimeRecoverySourceLabel")} {row.lastProbeFailureSource}
+                                </div>
+                              ) : null}
                             </div>
                           ) : null}
                         </details>

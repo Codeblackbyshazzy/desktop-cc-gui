@@ -1789,7 +1789,13 @@ async fn handle_rpc_request(
         }
         "connect_workspace" => {
             let id = parse_string(&params, "id")?;
-            state.connect_workspace(id, client_version).await?;
+            let recovery_source = params
+                .get("recoverySource")
+                .and_then(Value::as_str)
+                .map(ToString::to_string);
+            state
+                .connect_workspace(id, client_version, recovery_source)
+                .await?;
             Ok(json!({ "ok": true }))
         }
         "remove_workspace" => {

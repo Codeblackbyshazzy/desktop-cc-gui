@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -24,6 +24,7 @@ pub(crate) const RUNTIME_ACQUIRE_WAIT_TIMEOUT_SECS: u64 = 5;
 pub(crate) const RUNTIME_RECOVERY_MAX_CONSECUTIVE_FAILURES: u8 = 3;
 pub(crate) const RUNTIME_RECOVERY_RETRY_BACKOFF_MILLIS: u64 = 250;
 pub(crate) const RUNTIME_RECOVERY_QUARANTINE_MILLIS: u64 = 15_000;
+const RUNTIME_CHURN_WINDOW_MILLIS: u64 = 30_000;
 
 fn now_millis() -> u64 {
     SystemTime::now()
@@ -159,6 +160,16 @@ pub(crate) enum RuntimeState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum RuntimeStartupState {
+    Starting,
+    Ready,
+    SuspectStale,
+    Cooldown,
+    Quarantined,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RuntimeProcessDiagnostics {
     pub(crate) root_processes: u32,
@@ -227,6 +238,26 @@ pub(crate) struct RuntimePoolRow {
     pub(crate) last_exit_pending_request_count: u32,
     #[serde(default)]
     pub(crate) process_diagnostics: Option<RuntimeProcessDiagnostics>,
+    #[serde(default)]
+    pub(crate) startup_state: Option<RuntimeStartupState>,
+    #[serde(default)]
+    pub(crate) last_recovery_source: Option<String>,
+    #[serde(default)]
+    pub(crate) last_guard_state: Option<String>,
+    #[serde(default)]
+    pub(crate) last_replace_reason: Option<String>,
+    #[serde(default)]
+    pub(crate) last_probe_failure: Option<String>,
+    #[serde(default)]
+    pub(crate) last_probe_failure_source: Option<String>,
+    #[serde(default)]
+    pub(crate) has_stopping_predecessor: bool,
+    #[serde(default)]
+    pub(crate) recent_spawn_count: u32,
+    #[serde(default)]
+    pub(crate) recent_replace_count: u32,
+    #[serde(default)]
+    pub(crate) recent_force_kill_count: u32,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -318,6 +349,16 @@ struct RuntimeEntry {
     last_exit_signal: Option<String>,
     last_exit_pending_request_count: u32,
     process_diagnostics: Option<RuntimeProcessDiagnostics>,
+    startup_state: Option<RuntimeStartupState>,
+    last_recovery_source: Option<String>,
+    last_guard_state: Option<String>,
+    last_replace_reason: Option<String>,
+    last_probe_failure: Option<String>,
+    last_probe_failure_source: Option<String>,
+    has_stopping_predecessor: bool,
+    recent_spawn_events: VecDeque<u64>,
+    recent_replace_events: VecDeque<u64>,
+    recent_force_kill_events: VecDeque<u64>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -360,6 +401,16 @@ impl RuntimeEntry {
             last_exit_signal: None,
             last_exit_pending_request_count: 0,
             process_diagnostics: None,
+            startup_state: Some(RuntimeStartupState::Starting),
+            last_recovery_source: None,
+            last_guard_state: None,
+            last_replace_reason: None,
+            last_probe_failure: None,
+            last_probe_failure_source: None,
+            has_stopping_predecessor: false,
+            recent_spawn_events: VecDeque::new(),
+            recent_replace_events: VecDeque::new(),
+            recent_force_kill_events: VecDeque::new(),
         }
     }
 
@@ -376,6 +427,47 @@ impl RuntimeEntry {
             .chain(self.stream_leases.iter())
             .cloned()
             .collect()
+    }
+
+    fn prune_recent_events(events: &mut VecDeque<u64>) {
+        let cutoff = now_millis().saturating_sub(RUNTIME_CHURN_WINDOW_MILLIS);
+        while matches!(events.front(), Some(timestamp) if *timestamp < cutoff) {
+            events.pop_front();
+        }
+    }
+
+    fn record_recent_event(events: &mut VecDeque<u64>) {
+        Self::prune_recent_events(events);
+        events.push_back(now_millis());
+    }
+
+    fn recent_event_count(events: &VecDeque<u64>) -> u32 {
+        let cutoff = now_millis().saturating_sub(RUNTIME_CHURN_WINDOW_MILLIS);
+        events.iter().filter(|timestamp| **timestamp >= cutoff).count() as u32
+    }
+
+    fn record_spawn_event(&mut self) {
+        Self::record_recent_event(&mut self.recent_spawn_events);
+    }
+
+    fn record_replace_event(&mut self) {
+        Self::record_recent_event(&mut self.recent_replace_events);
+    }
+
+    fn record_force_kill_event(&mut self) {
+        Self::record_recent_event(&mut self.recent_force_kill_events);
+    }
+
+    fn recent_spawn_count(&self) -> u32 {
+        Self::recent_event_count(&self.recent_spawn_events)
+    }
+
+    fn recent_replace_count(&self) -> u32 {
+        Self::recent_event_count(&self.recent_replace_events)
+    }
+
+    fn recent_force_kill_count(&self) -> u32 {
+        Self::recent_event_count(&self.recent_force_kill_events)
     }
 
     fn has_active_leases(&self) -> bool {
@@ -522,38 +614,193 @@ impl RuntimeManager {
     pub(crate) async fn record_recovery_success(&self, engine: &str, workspace_id: &str) {
         let key = runtime_key(engine, workspace_id);
         self.recovery.lock().await.remove(&key);
+        let mut entries = self.entries.lock().await;
+        if let Some(runtime) = entries.get_mut(&key) {
+            runtime.last_guard_state = Some("recovered".to_string());
+            if !runtime.starting && runtime.error.is_none() {
+                runtime.startup_state = Some(RuntimeStartupState::Ready);
+            }
+        }
+        drop(entries);
+        let _ = self.persist_ledger().await;
+    }
+
+    pub(crate) async fn reset_recovery_cycle(
+        &self,
+        engine: &str,
+        workspace_id: &str,
+        source: &str,
+    ) {
+        let key = runtime_key(engine, workspace_id);
+        self.recovery.lock().await.remove(&key);
+        let mut entries = self.entries.lock().await;
+        if let Some(runtime) = entries.get_mut(&key) {
+            runtime.last_recovery_source = Some(source.to_string());
+            runtime.last_guard_state = Some("explicit-reset".to_string());
+            if runtime.error.is_none() {
+                runtime.startup_state = Some(RuntimeStartupState::Ready);
+            }
+        }
+        drop(entries);
+        let _ = self.persist_ledger().await;
+    }
+
+    pub(crate) async fn note_guard_event(
+        &self,
+        engine: &str,
+        workspace_id: &str,
+        source: &str,
+        guard_state: &str,
+    ) {
+        let key = runtime_key(engine, workspace_id);
+        let mut entries = self.entries.lock().await;
+        if let Some(runtime) = entries.get_mut(&key) {
+            runtime.last_recovery_source = Some(source.to_string());
+            runtime.last_guard_state = Some(guard_state.to_string());
+        }
+        drop(entries);
+        let _ = self.persist_ledger().await;
+    }
+
+    pub(crate) async fn note_probe_failure(
+        &self,
+        engine: &str,
+        workspace_id: &str,
+        source: &str,
+        error: &str,
+    ) {
+        let key = runtime_key(engine, workspace_id);
+        let mut entries = self.entries.lock().await;
+        if let Some(runtime) = entries.get_mut(&key) {
+            runtime.last_probe_failure = Some(error.to_string());
+            runtime.last_probe_failure_source = Some(source.to_string());
+            runtime.last_recovery_source = Some(source.to_string());
+            runtime.last_guard_state = Some("probe-failed".to_string());
+            if runtime.startup_state == Some(RuntimeStartupState::Ready) {
+                runtime.startup_state = Some(RuntimeStartupState::SuspectStale);
+            }
+        }
+        drop(entries);
+        let _ = self.persist_ledger().await;
+    }
+
+    pub(crate) async fn note_replacement_started(
+        &self,
+        session: &WorkspaceSession,
+        source: &str,
+        has_predecessor: bool,
+    ) {
+        let pid = {
+            let child = session.child.lock().await;
+            child.id()
+        };
+        let mut entries = self.entries.lock().await;
+        let runtime = Self::upsert_entry(&mut entries, &session.entry, "codex");
+        runtime.update_workspace(&session.entry, "codex");
+        runtime.pid = pid;
+        runtime.wrapper_kind = Some(session.wrapper_kind.clone());
+        runtime.resolved_bin = Some(session.resolved_bin.clone());
+        runtime.started_at_ms.get_or_insert_with(now_millis);
+        runtime.error = None;
+        runtime.session_exists = true;
+        runtime.starting = false;
+        runtime.stopping = false;
+        runtime.zombie_suspected = false;
+        runtime.evict_candidate = false;
+        runtime.eviction_reason = None;
+        runtime.last_exit_reason_code = None;
+        runtime.last_exit_message = None;
+        runtime.last_exit_at_ms = None;
+        runtime.last_exit_code = None;
+        runtime.last_exit_signal = None;
+        runtime.last_exit_pending_request_count = 0;
+        runtime.process_diagnostics = pid.and_then(snapshot_process_diagnostics);
+        runtime.startup_state = Some(RuntimeStartupState::Ready);
+        runtime.last_recovery_source = Some(source.to_string());
+        runtime.last_guard_state = Some("replacement-ready".to_string());
+        runtime.last_replace_reason = Some(source.to_string());
+        runtime.has_stopping_predecessor = has_predecessor;
+        runtime.record_replace_event();
+        runtime.clear_active_work_protection_if_idle();
+        drop(entries);
+        let _ = self.persist_ledger().await;
+    }
+
+    pub(crate) async fn clear_stopping_predecessor(
+        &self,
+        engine: &str,
+        workspace_id: &str,
+        source: &str,
+    ) {
+        let key = runtime_key(engine, workspace_id);
+        let mut entries = self.entries.lock().await;
+        if let Some(runtime) = entries.get_mut(&key) {
+            runtime.has_stopping_predecessor = false;
+            runtime.last_recovery_source = Some(source.to_string());
+            runtime.last_guard_state = Some("replacement-settled".to_string());
+        }
+        drop(entries);
+        let _ = self.persist_ledger().await;
     }
 
     pub(crate) async fn record_recovery_failure(
         &self,
         engine: &str,
         workspace_id: &str,
+        source: &str,
         error: &str,
     ) -> Option<String> {
         let key = runtime_key(engine, workspace_id);
-        let mut recovery = self.recovery.lock().await;
         let now = now_millis();
-        let entry = recovery.entry(key).or_default();
-        entry.consecutive_failures = entry
-            .consecutive_failures
-            .saturating_add(1)
-            .min(RUNTIME_RECOVERY_MAX_CONSECUTIVE_FAILURES);
-        entry.last_failure_at_ms = Some(now);
-        entry.last_error = Some(error.to_string());
+        let consecutive_failures = {
+            let mut recovery = self.recovery.lock().await;
+            let entry = recovery.entry(key.clone()).or_default();
+            entry.consecutive_failures = entry
+                .consecutive_failures
+                .saturating_add(1)
+                .min(RUNTIME_RECOVERY_MAX_CONSECUTIVE_FAILURES);
+            entry.last_failure_at_ms = Some(now);
+            entry.last_error = Some(error.to_string());
+            if entry.consecutive_failures < RUNTIME_RECOVERY_MAX_CONSECUTIVE_FAILURES {
+                entry.quarantined_until_ms = None;
+            }
+            entry.consecutive_failures
+        };
 
-        if entry.consecutive_failures < RUNTIME_RECOVERY_MAX_CONSECUTIVE_FAILURES {
-            entry.quarantined_until_ms = None;
+        let mut entries = self.entries.lock().await;
+        if let Some(runtime) = entries.get_mut(&key) {
+            runtime.last_guard_state = Some("cooldown".to_string());
+            runtime.last_probe_failure = Some(error.to_string());
+            runtime.last_probe_failure_source = Some(source.to_string());
+            runtime.last_recovery_source = Some(source.to_string());
+            runtime.startup_state = Some(RuntimeStartupState::Cooldown);
+        }
+        drop(entries);
+
+        if consecutive_failures < RUNTIME_RECOVERY_MAX_CONSECUTIVE_FAILURES {
             return None;
         }
 
-        let quarantined_until_ms = now.saturating_add(RUNTIME_RECOVERY_QUARANTINE_MILLIS);
-        entry.quarantined_until_ms = Some(quarantined_until_ms);
+        {
+            let mut recovery = self.recovery.lock().await;
+            if let Some(entry) = recovery.get_mut(&key) {
+                let quarantined_until_ms = now.saturating_add(RUNTIME_RECOVERY_QUARANTINE_MILLIS);
+                entry.quarantined_until_ms = Some(quarantined_until_ms);
+            }
+        }
+        let mut entries = self.entries.lock().await;
+        if let Some(runtime) = entries.get_mut(&runtime_key(engine, workspace_id)) {
+            runtime.last_guard_state = Some("quarantined".to_string());
+            runtime.last_recovery_source = Some(source.to_string());
+            runtime.startup_state = Some(RuntimeStartupState::Quarantined);
+        }
+        drop(entries);
         let remaining_secs = RUNTIME_RECOVERY_QUARANTINE_MILLIS.div_ceil(1000);
         Some(format!(
             "[RUNTIME_RECOVERY_QUARANTINED] Runtime recovery paused for workspace {} (engine {}) after {} consecutive failures. Retry after {}s. Last error: {}",
             workspace_id,
             normalize_engine(engine),
-            entry.consecutive_failures,
+            consecutive_failures,
             remaining_secs,
             error
         ))
@@ -563,10 +810,11 @@ impl RuntimeManager {
         &self,
         engine: &str,
         workspace_id: &str,
+        source: &str,
         error: &str,
     ) -> Result<(), String> {
         if let Some(quarantine_error) = self
-            .record_recovery_failure(engine, workspace_id, error)
+            .record_recovery_failure(engine, workspace_id, source, error)
             .await
         {
             return Err(quarantine_error);
@@ -648,19 +896,38 @@ impl RuntimeManager {
         &self,
         engine: &str,
         workspace_id: &str,
+        source: &str,
+        automatic_recovery: bool,
         wait_timeout: Duration,
         timeout_error: &str,
     ) -> Result<RuntimeAcquireDisposition, String> {
-        self.ensure_recovery_ready(engine, workspace_id).await?;
+        if automatic_recovery {
+            if let Err(error) = self.ensure_recovery_ready(engine, workspace_id).await {
+                self.note_guard_event(engine, workspace_id, source, "quarantined")
+                    .await;
+                return Err(error);
+            }
+        } else {
+            self.reset_recovery_cycle(engine, workspace_id, source).await;
+        }
         match self.begin_runtime_acquire(engine, workspace_id).await {
-            RuntimeAcquireGate::Leader(token) => Ok(RuntimeAcquireDisposition::Leader(token)),
+            RuntimeAcquireGate::Leader(token) => {
+                self.note_guard_event(engine, workspace_id, source, "leader")
+                    .await;
+                Ok(RuntimeAcquireDisposition::Leader(token))
+            }
             RuntimeAcquireGate::Waiter(notify) => {
                 match tokio::time::timeout(wait_timeout, notify.notified()).await {
-                    Ok(()) => Ok(RuntimeAcquireDisposition::Retry),
+                    Ok(()) => {
+                        self.note_guard_event(engine, workspace_id, source, "retry")
+                            .await;
+                        Ok(RuntimeAcquireDisposition::Retry)
+                    }
                     Err(_) => {
                         self.record_recovery_failure_with_backoff(
                             engine,
                             workspace_id,
+                            source,
                             timeout_error,
                         )
                         .await?;
@@ -673,8 +940,12 @@ impl RuntimeManager {
                             )
                             .await
                         {
+                            self.note_guard_event(engine, workspace_id, source, "leader")
+                                .await;
                             return Ok(RuntimeAcquireDisposition::Leader(token));
                         }
+                        self.note_guard_event(engine, workspace_id, source, "cooldown")
+                            .await;
                         Ok(RuntimeAcquireDisposition::Retry)
                     }
                 }
@@ -686,11 +957,15 @@ impl RuntimeManager {
         &self,
         engine: &str,
         workspace_id: &str,
+        source: &str,
+        automatic_recovery: bool,
         timeout_error: &str,
     ) -> Result<RuntimeAcquireDisposition, String> {
         self.begin_runtime_acquire_or_retry_with_timeout(
             engine,
             workspace_id,
+            source,
+            automatic_recovery,
             Duration::from_secs(RUNTIME_ACQUIRE_WAIT_TIMEOUT_SECS),
             timeout_error,
         )
@@ -752,7 +1027,7 @@ impl RuntimeManager {
         &self,
         entry: &WorkspaceEntry,
         engine: &str,
-        _source: &str,
+        source: &str,
     ) {
         let mut entries = self.entries.lock().await;
         let runtime = Self::upsert_entry(&mut entries, entry, engine);
@@ -771,11 +1046,19 @@ impl RuntimeManager {
         runtime.last_exit_signal = None;
         runtime.last_exit_pending_request_count = 0;
         runtime.process_diagnostics = None;
+        runtime.startup_state = Some(RuntimeStartupState::Starting);
+        runtime.last_recovery_source = Some(source.to_string());
+        runtime.last_guard_state = Some("leader".to_string());
+        runtime.last_replace_reason = None;
+        runtime.last_probe_failure = None;
+        runtime.last_probe_failure_source = None;
+        runtime.has_stopping_predecessor = false;
+        runtime.record_spawn_event();
         drop(entries);
         let _ = self.persist_ledger().await;
     }
 
-    pub(crate) async fn record_ready(&self, session: &WorkspaceSession, _source: &str) {
+    pub(crate) async fn record_ready(&self, session: &WorkspaceSession, source: &str) {
         let pid = {
             let child = session.child.lock().await;
             child.id()
@@ -802,6 +1085,12 @@ impl RuntimeManager {
         runtime.last_exit_pending_request_count = 0;
         runtime.clear_active_work_protection_if_idle();
         runtime.process_diagnostics = pid.and_then(snapshot_process_diagnostics);
+        runtime.startup_state = Some(RuntimeStartupState::Ready);
+        runtime.last_recovery_source = Some(source.to_string());
+        runtime.last_guard_state = Some("ready".to_string());
+        runtime.last_probe_failure = None;
+        runtime.last_probe_failure_source = None;
+        runtime.has_stopping_predecessor = false;
         drop(entries);
         let _ = self.persist_ledger().await;
     }
@@ -843,6 +1132,10 @@ impl RuntimeManager {
         runtime.process_diagnostics = Some(diagnostics);
         runtime.turn_leases.insert(source.to_string());
         runtime.refresh_active_work_protection();
+        runtime.startup_state = Some(RuntimeStartupState::Ready);
+        runtime.last_recovery_source = Some(source.to_string());
+        runtime.last_guard_state = Some("ready".to_string());
+        runtime.has_stopping_predecessor = false;
         drop(entries);
         let _ = self.persist_ledger().await;
     }
@@ -934,7 +1227,7 @@ impl RuntimeManager {
         &self,
         entry: &WorkspaceEntry,
         engine: &str,
-        _source: &str,
+        source: &str,
         error: String,
     ) {
         let mut entries = self.entries.lock().await;
@@ -950,6 +1243,10 @@ impl RuntimeManager {
         runtime.stream_leases.clear();
         runtime.active_work_since_ms = None;
         runtime.active_work_last_renewed_at_ms = None;
+        runtime.startup_state = Some(RuntimeStartupState::Cooldown);
+        runtime.last_recovery_source = Some(source.to_string());
+        runtime.last_guard_state = Some("failed".to_string());
+        runtime.has_stopping_predecessor = false;
         drop(entries);
         let _ = self.persist_ledger().await;
     }
@@ -994,6 +1291,8 @@ impl RuntimeManager {
             runtime.stream_leases.clear();
             runtime.active_work_since_ms = None;
             runtime.active_work_last_renewed_at_ms = None;
+            runtime.startup_state = None;
+            runtime.has_stopping_predecessor = false;
         }
         drop(entries);
         let _ = self.persist_ledger().await;
@@ -1029,6 +1328,8 @@ impl RuntimeManager {
             runtime.last_exit_signal = record.exit_signal;
             runtime.last_exit_pending_request_count = record.pending_request_count;
             runtime.last_used_at_ms = now;
+            runtime.startup_state = Some(RuntimeStartupState::Cooldown);
+            runtime.has_stopping_predecessor = false;
         }
         drop(entries);
         let _ = self.persist_ledger().await;
@@ -1045,6 +1346,17 @@ impl RuntimeManager {
         let mut diagnostics = self.diagnostics.lock().await;
         diagnostics.force_kill_count += 1;
         drop(diagnostics);
+        let _ = self.persist_ledger().await;
+    }
+
+    pub(crate) async fn note_force_kill_for_runtime(&self, engine: &str, workspace_id: &str) {
+        self.note_force_kill().await;
+        let key = runtime_key(engine, workspace_id);
+        let mut entries = self.entries.lock().await;
+        if let Some(runtime) = entries.get_mut(&key) {
+            runtime.record_force_kill_event();
+        }
+        drop(entries);
         let _ = self.persist_ledger().await;
     }
 
@@ -1136,6 +1448,9 @@ impl RuntimeManager {
                 let lease_sources = entry.lease_sources();
                 let active_work_protected = entry.has_active_leases();
                 let active_work_reason = entry.active_work_reason();
+                let recent_spawn_count = entry.recent_spawn_count();
+                let recent_replace_count = entry.recent_replace_count();
+                let recent_force_kill_count = entry.recent_force_kill_count();
                 RuntimePoolRow {
                     workspace_id: entry.workspace_id,
                     workspace_name: entry.workspace_name,
@@ -1168,6 +1483,16 @@ impl RuntimeManager {
                         .pid
                         .and_then(snapshot_process_diagnostics)
                         .or(entry.process_diagnostics),
+                    startup_state: entry.startup_state.clone(),
+                    last_recovery_source: entry.last_recovery_source.clone(),
+                    last_guard_state: entry.last_guard_state.clone(),
+                    last_replace_reason: entry.last_replace_reason.clone(),
+                    last_probe_failure: entry.last_probe_failure.clone(),
+                    last_probe_failure_source: entry.last_probe_failure_source.clone(),
+                    has_stopping_predecessor: entry.has_stopping_predecessor,
+                    recent_spawn_count,
+                    recent_replace_count,
+                    recent_force_kill_count,
                 }
             })
             .collect::<Vec<_>>();
@@ -1309,6 +1634,9 @@ impl RuntimeManager {
                 let lease_sources = entry.lease_sources();
                 let active_work_protected = entry.has_active_leases();
                 let active_work_reason = entry.active_work_reason();
+                let recent_spawn_count = entry.recent_spawn_count();
+                let recent_replace_count = entry.recent_replace_count();
+                let recent_force_kill_count = entry.recent_force_kill_count();
                 RuntimePoolRow {
                     workspace_id: entry.workspace_id,
                     workspace_name: entry.workspace_name,
@@ -1338,6 +1666,16 @@ impl RuntimeManager {
                     last_exit_signal: entry.last_exit_signal,
                     last_exit_pending_request_count: entry.last_exit_pending_request_count,
                     process_diagnostics: entry.process_diagnostics,
+                    startup_state: entry.startup_state.clone(),
+                    last_recovery_source: entry.last_recovery_source.clone(),
+                    last_guard_state: entry.last_guard_state.clone(),
+                    last_replace_reason: entry.last_replace_reason.clone(),
+                    last_probe_failure: entry.last_probe_failure.clone(),
+                    last_probe_failure_source: entry.last_probe_failure_source.clone(),
+                    has_stopping_predecessor: entry.has_stopping_predecessor,
+                    recent_spawn_count,
+                    recent_replace_count,
+                    recent_force_kill_count,
                 }
             })
             .collect::<Vec<_>>();
@@ -1665,11 +2003,74 @@ pub(crate) async fn terminate_workspace_session(
     };
     if forced {
         if let Some(runtime_manager) = runtime_manager {
-            runtime_manager.note_force_kill().await;
+            runtime_manager
+                .note_force_kill_for_runtime("codex", &workspace_id)
+                .await;
         }
     }
     if let Some(runtime_manager) = runtime_manager {
         runtime_manager.record_removed("codex", &workspace_id).await;
+    }
+    Ok(())
+}
+
+async fn terminate_replaced_workspace_session(
+    session: Arc<WorkspaceSession>,
+    runtime_manager: Option<&RuntimeManager>,
+) -> Result<(), String> {
+    let workspace_id = session.entry.id.clone();
+    session.mark_manual_shutdown();
+    let forced = {
+        let mut child = session.child.lock().await;
+        terminate_workspace_session_process(&mut child).await?
+    };
+    if let Some(runtime_manager) = runtime_manager {
+        if forced {
+            runtime_manager
+                .note_force_kill_for_runtime("codex", &workspace_id)
+                .await;
+        }
+        runtime_manager
+            .clear_stopping_predecessor("codex", &workspace_id, "replacement-stop")
+            .await;
+    }
+    Ok(())
+}
+
+async fn rollback_replaced_workspace_session(
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    runtime_manager: Option<&RuntimeManager>,
+    workspace_id: &str,
+    previous_session: Arc<WorkspaceSession>,
+    replacement_session: Arc<WorkspaceSession>,
+) -> Result<(), String> {
+    {
+        let mut sessions_guard = sessions.lock().await;
+        let should_restore_previous = sessions_guard
+            .get(workspace_id)
+            .map(|current| Arc::ptr_eq(current, &replacement_session))
+            .unwrap_or(false);
+        if should_restore_previous {
+            sessions_guard.insert(workspace_id.to_string(), Arc::clone(&previous_session));
+        }
+    }
+
+    let forced = {
+        replacement_session.mark_manual_shutdown();
+        let mut child = replacement_session.child.lock().await;
+        terminate_workspace_session_process(&mut child).await?
+    };
+    if forced {
+        if let Some(runtime_manager) = runtime_manager {
+            runtime_manager
+                .note_force_kill_for_runtime("codex", workspace_id)
+                .await;
+        }
+    }
+    if let Some(runtime_manager) = runtime_manager {
+        runtime_manager
+            .record_ready(&previous_session, "replacement-rollback")
+            .await;
     }
     Ok(())
 }
@@ -1681,14 +2082,47 @@ pub(crate) async fn replace_workspace_session(
     new_session: Arc<WorkspaceSession>,
     lease_source: &str,
 ) -> Result<(), String> {
+    let old_session = sessions
+        .lock()
+        .await
+        .insert(workspace_id.clone(), Arc::clone(&new_session));
+    if let Some(old_session) = old_session {
+        if let Some(runtime_manager) = runtime_manager {
+            runtime_manager
+                .note_replacement_started(&new_session, lease_source, true)
+                .await;
+        }
+        if let Err(error) =
+            terminate_replaced_workspace_session(Arc::clone(&old_session), runtime_manager).await
+        {
+            if let Err(rollback_error) = rollback_replaced_workspace_session(
+                sessions,
+                runtime_manager,
+                &workspace_id,
+                old_session,
+                new_session,
+            )
+            .await
+            {
+                return Err(format!(
+                    "failed to stop replaced workspace session for {workspace_id}: {error}; replacement rollback failed: {rollback_error}",
+                ));
+            }
+            return Err(format!(
+                "failed to stop replaced workspace session for {workspace_id}: {error}",
+            ));
+        }
+        if let Some(runtime_manager) = runtime_manager {
+            runtime_manager
+                .record_ready(&new_session, lease_source)
+                .await;
+        }
+        return Ok(());
+    }
     if let Some(runtime_manager) = runtime_manager {
         runtime_manager
             .record_ready(&new_session, lease_source)
             .await;
-    }
-    let old_session = sessions.lock().await.insert(workspace_id, new_session);
-    if let Some(old_session) = old_session {
-        terminate_workspace_session(old_session, runtime_manager).await?;
     }
     Ok(())
 }
@@ -2194,19 +2628,19 @@ fn build_process_diagnostics(
 }
 
 #[cfg(test)]
+mod recovery_tests;
+
+#[cfg(test)]
 mod tests {
     use super::{
         build_engine_observability, is_engine_root_process, parse_process_rows_unix_output,
         parse_process_rows_windows_payload, write_json_atomically, ProcessSnapshotRow,
-        RuntimeAcquireDisposition, RuntimeAcquireGate, RuntimeEndedRecord,
-        RuntimeEngineObservability, RuntimeManager, RuntimeProcessDiagnostics, RuntimeState,
-        RUNTIME_RECOVERY_MAX_CONSECUTIVE_FAILURES,
+        RuntimeEndedRecord, RuntimeEngineObservability, RuntimeManager,
+        RuntimeProcessDiagnostics, RuntimeState,
     };
     use crate::types::{AppSettings, WorkspaceEntry, WorkspaceKind, WorkspaceSettings};
     use serde_json::json;
     use std::fs;
-    use std::sync::Arc;
-    use std::time::Duration;
     use uuid::Uuid;
 
     fn workspace_entry(id: &str) -> WorkspaceEntry {
@@ -2363,154 +2797,6 @@ mod tests {
         assert!(matches!(snapshot.rows[0].state, RuntimeState::Evictable));
     }
 
-    #[tokio::test]
-    async fn recovery_guard_quarantines_after_repeated_failures() {
-        let manager = RuntimeManager::new(&std::env::temp_dir());
-
-        for attempt in 1..RUNTIME_RECOVERY_MAX_CONSECUTIVE_FAILURES {
-            let quarantined = manager
-                .record_recovery_failure("codex", "ws-1", &format!("boom-{attempt}"))
-                .await;
-            assert!(quarantined.is_none());
-        }
-
-        let quarantined = manager
-            .record_recovery_failure("codex", "ws-1", "boom-final")
-            .await;
-        let message = quarantined.expect("should enter quarantine");
-        assert!(message.contains("[RUNTIME_RECOVERY_QUARANTINED]"));
-        assert!(message.contains("boom-final"));
-
-        let blocked = manager
-            .recovery_quarantine_error("codex", "ws-1")
-            .await
-            .expect("quarantine should block immediate retry");
-        assert!(blocked.contains("Retry after"));
-    }
-
-    #[tokio::test]
-    async fn recovery_guard_resets_after_success() {
-        let manager = RuntimeManager::new(&std::env::temp_dir());
-        let _ = manager
-            .record_recovery_failure("codex", "ws-1", "boom")
-            .await;
-
-        manager.record_recovery_success("codex", "ws-1").await;
-
-        assert!(manager
-            .recovery_quarantine_error("codex", "ws-1")
-            .await
-            .is_none());
-        let next = manager
-            .record_recovery_failure("codex", "ws-1", "boom-again")
-            .await;
-        assert!(next.is_none());
-    }
-
-    #[tokio::test]
-    async fn begin_runtime_acquire_or_retry_retries_after_leader_finishes() {
-        let manager = Arc::new(RuntimeManager::new(&std::env::temp_dir()));
-        let leader = manager.begin_runtime_acquire("codex", "ws-1").await;
-        let leader_token = match leader {
-            RuntimeAcquireGate::Leader(token) => token,
-            RuntimeAcquireGate::Waiter(_) => panic!("first acquire should become leader"),
-        };
-
-        let manager_for_finish = Arc::clone(&manager);
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-            manager_for_finish
-                .finish_runtime_acquire(&leader_token)
-                .await;
-        });
-
-        let result = manager
-            .begin_runtime_acquire_or_retry_with_timeout(
-                "codex",
-                "ws-1",
-                Duration::from_millis(50),
-                "timed out waiting for concurrent runtime acquire",
-            )
-            .await
-            .expect("waiter should retry after leader finishes");
-        assert_eq!(result, RuntimeAcquireDisposition::Retry);
-        assert!(manager
-            .recovery_quarantine_error("codex", "ws-1")
-            .await
-            .is_none());
-    }
-
-    #[tokio::test]
-    async fn begin_runtime_acquire_or_retry_quarantines_after_repeated_waiter_timeouts() {
-        let manager = RuntimeManager::new(&std::env::temp_dir());
-        let leader = manager.begin_runtime_acquire("codex", "ws-1").await;
-        assert!(matches!(leader, RuntimeAcquireGate::Leader(_)));
-
-        for _ in 1..=RUNTIME_RECOVERY_MAX_CONSECUTIVE_FAILURES {
-            let result = manager
-                .begin_runtime_acquire_or_retry_with_timeout(
-                    "codex",
-                    "ws-1",
-                    Duration::from_millis(200),
-                    "timed out waiting for concurrent runtime acquire",
-                )
-                .await;
-            if result.is_err() {
-                break;
-            }
-            assert_eq!(result.unwrap(), RuntimeAcquireDisposition::Retry);
-            let mut startup_gates = manager.startup_gates.lock().await;
-            let entry = startup_gates
-                .get_mut("codex::ws-1")
-                .expect("gate entry should remain present");
-            entry.started_at_ms = super::now_millis();
-        }
-
-        let blocked = manager
-            .ensure_recovery_ready("codex", "ws-1")
-            .await
-            .expect_err("repeated waiter timeouts should enter quarantine");
-        assert!(blocked.contains("[RUNTIME_RECOVERY_QUARANTINED]"));
-    }
-
-    #[tokio::test]
-    async fn stale_runtime_acquire_can_be_taken_over_without_losing_new_gate() {
-        let manager = RuntimeManager::new(&std::env::temp_dir());
-        let leader = manager.begin_runtime_acquire("codex", "ws-1").await;
-        let leader_token = match leader {
-            RuntimeAcquireGate::Leader(token) => token,
-            RuntimeAcquireGate::Waiter(_) => panic!("first acquire should become leader"),
-        };
-
-        {
-            let mut startup_gates = manager.startup_gates.lock().await;
-            let entry = startup_gates
-                .get_mut("codex::ws-1")
-                .expect("gate entry should exist");
-            entry.started_at_ms = entry.started_at_ms.saturating_sub(100);
-        }
-
-        let takeover = manager
-            .begin_runtime_acquire_or_retry_with_timeout(
-                "codex",
-                "ws-1",
-                Duration::from_millis(5),
-                "timed out waiting for concurrent runtime acquire",
-            )
-            .await
-            .expect("stale waiter should take over");
-        let takeover_token = match takeover {
-            RuntimeAcquireDisposition::Leader(token) => token,
-            RuntimeAcquireDisposition::Retry => panic!("stale waiter should become leader"),
-        };
-
-        manager.finish_runtime_acquire(&leader_token).await;
-        assert!(manager.has_pending_acquire_for_engine("codex").await);
-
-        manager.finish_runtime_acquire(&takeover_token).await;
-        assert!(!manager.has_pending_acquire_for_engine("codex").await);
-    }
-
     #[test]
     fn engine_observability_uses_tracked_snapshot_fields() {
         let rows = vec![super::RuntimePoolRow {
@@ -2550,6 +2836,16 @@ mod tests {
                 resume_helper_processes: 0,
                 orphan_residue_processes: 0,
             }),
+            startup_state: Some(super::RuntimeStartupState::Ready),
+            last_recovery_source: Some("thread-list-live".to_string()),
+            last_guard_state: Some("ready".to_string()),
+            last_replace_reason: None,
+            last_probe_failure: None,
+            last_probe_failure_source: None,
+            has_stopping_predecessor: false,
+            recent_spawn_count: 1,
+            recent_replace_count: 0,
+            recent_force_kill_count: 0,
         }];
 
         let observability = build_engine_observability(&rows);
@@ -2641,7 +2937,7 @@ mod tests {
     #[test]
     fn write_json_atomically_replaces_existing_file() {
         let temp_dir =
-            std::env::temp_dir().join(format!("mossx-runtime-ledger-{}", Uuid::new_v4()));
+            std::env::temp_dir().join(format!("ccgui-runtime-ledger-{}", Uuid::new_v4()));
         fs::create_dir_all(&temp_dir).expect("create temp dir");
         let path = temp_dir.join("runtime-pool-ledger.json");
 

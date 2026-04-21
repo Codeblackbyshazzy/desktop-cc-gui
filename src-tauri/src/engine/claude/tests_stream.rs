@@ -3,18 +3,18 @@ use serde_json::json;
 use tokio::sync::broadcast::error::TryRecvError;
 
 fn test_workspace_path() -> PathBuf {
-    std::env::temp_dir().join("mossx-claude-test-workspace")
+    std::env::temp_dir().join("ccgui-claude-test-workspace")
 }
 
 fn test_external_spec_root() -> String {
     std::env::temp_dir()
-        .join("mossx-external-openspec")
+        .join("ccgui-external-openspec")
         .to_string_lossy()
         .to_string()
 }
 
 fn create_fake_claude_stream_environment(lines: &[&str]) -> (PathBuf, PathBuf, PathBuf) {
-    let root = std::env::temp_dir().join(format!("mossx-claude-stream-{}", uuid::Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ccgui-claude-stream-{}", uuid::Uuid::new_v4()));
     let workspace_path = root.join("workspace");
     std::fs::create_dir_all(&workspace_path).expect("create fake claude workspace");
 

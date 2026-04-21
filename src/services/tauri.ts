@@ -404,8 +404,11 @@ export async function writePanelLockPasswordFile(
   return invoke("client_panel_lock_password_write", { password });
 }
 
-export async function connectWorkspace(id: string): Promise<void> {
-  return invoke("connect_workspace", { id });
+export async function connectWorkspace(
+  id: string,
+  recoverySource?: string,
+): Promise<void> {
+  return invoke("connect_workspace", { id, recoverySource });
 }
 
 export async function ensureRuntimeReady(workspaceId: string): Promise<void> {

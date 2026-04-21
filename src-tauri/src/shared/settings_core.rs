@@ -296,7 +296,7 @@ mod tests {
     async fn get_app_settings_core_ignores_external_unified_exec_override() {
         let _guard = ENV_LOCK.lock().unwrap();
         let codex_home =
-            env::temp_dir().join(format!("mossx-settings-core-{}", std::process::id()));
+            env::temp_dir().join(format!("ccgui-settings-core-{}", std::process::id()));
         let _ = fs::remove_dir_all(&codex_home);
         fs::create_dir_all(&codex_home).unwrap();
         fs::write(
@@ -329,7 +329,7 @@ mod tests {
     async fn update_app_settings_core_stops_syncing_unified_exec_to_external_config() {
         let _guard = ENV_LOCK.lock().unwrap();
         let test_root =
-            env::temp_dir().join(format!("mossx-settings-core-update-{}", std::process::id()));
+            env::temp_dir().join(format!("ccgui-settings-core-update-{}", std::process::id()));
         let _ = fs::remove_dir_all(&test_root);
         fs::create_dir_all(&test_root).unwrap();
         let codex_home = test_root.join("codex-home");
@@ -375,7 +375,7 @@ mod tests {
     fn unified_exec_external_status_reports_explicit_override() {
         let _guard = ENV_LOCK.lock().unwrap();
         let codex_home =
-            env::temp_dir().join(format!("mossx-settings-core-status-{}", std::process::id()));
+            env::temp_dir().join(format!("ccgui-settings-core-status-{}", std::process::id()));
         let _ = fs::remove_dir_all(&codex_home);
         fs::create_dir_all(&codex_home).unwrap();
         fs::write(
@@ -396,7 +396,7 @@ mod tests {
     fn restore_codex_unified_exec_official_default_removes_override() {
         let _guard = ENV_LOCK.lock().unwrap();
         let codex_home =
-            env::temp_dir().join(format!("mossx-settings-core-repair-{}", std::process::id()));
+            env::temp_dir().join(format!("ccgui-settings-core-repair-{}", std::process::id()));
         let _ = fs::remove_dir_all(&codex_home);
         fs::create_dir_all(&codex_home).unwrap();
         fs::write(
@@ -419,7 +419,7 @@ mod tests {
     fn set_codex_unified_exec_official_override_writes_explicit_value() {
         let _guard = ENV_LOCK.lock().unwrap();
         let codex_home =
-            env::temp_dir().join(format!("mossx-settings-core-set-{}", std::process::id()));
+            env::temp_dir().join(format!("ccgui-settings-core-set-{}", std::process::id()));
         let _ = fs::remove_dir_all(&codex_home);
         fs::create_dir_all(&codex_home).unwrap();
         let _codex_home_guard = CodexHomeTestGuard::new(&codex_home);

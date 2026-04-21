@@ -321,6 +321,16 @@ export type RuntimePoolRow = {
   lastExitSignal?: string | null;
   lastExitPendingRequestCount?: number;
   processDiagnostics?: RuntimeProcessDiagnostics | null;
+  startupState?: "starting" | "ready" | "suspect-stale" | "cooldown" | "quarantined" | null;
+  lastRecoverySource?: string | null;
+  lastGuardState?: string | null;
+  lastReplaceReason?: string | null;
+  lastProbeFailure?: string | null;
+  lastProbeFailureSource?: string | null;
+  hasStoppingPredecessor?: boolean;
+  recentSpawnCount?: number;
+  recentReplaceCount?: number;
+  recentForceKillCount?: number;
 };
 
 export type RuntimeEngineObservability = {

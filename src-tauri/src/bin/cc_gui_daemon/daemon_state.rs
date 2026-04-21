@@ -163,6 +163,7 @@ impl DaemonState {
         self.connect_workspace(
             workspace_id.to_string(),
             env!("CARGO_PKG_VERSION").to_string(),
+            Some("ensure-runtime-ready".to_string()),
         )
         .await
     }
@@ -520,6 +521,7 @@ impl DaemonState {
         &self,
         id: String,
         client_version: String,
+        recovery_source: Option<String>,
     ) -> Result<(), String> {
         {
             let sessions = self.sessions.lock().await;
@@ -545,12 +547,16 @@ impl DaemonState {
         }
 
         let client_version = client_version.clone();
+        let recovery_source = recovery_source.unwrap_or_else(|| "explicit-connect".to_string());
+        let automatic_recovery = recovery_source != "explicit-connect";
         workspaces_core::connect_workspace_core(
             id,
             &self.workspaces,
             &self.sessions,
             &self.app_settings,
             None,
+            &recovery_source,
+            automatic_recovery,
             move |entry, default_bin, codex_args, codex_home| {
                 spawn_with_client(
                     self.event_sink.clone(),

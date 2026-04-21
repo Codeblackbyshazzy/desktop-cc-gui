@@ -1137,3 +1137,68 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 88: Archive Codex stalled recovery change
+
+**Date**: 2026-04-21
+**Task**: Archive Codex stalled recovery change
+**Branch**: `feature/v-0.4.7`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 任务目标
+- 基于已落地实现，回写并收口 OpenSpec change `fix-codex-stalled-user-input-and-runtime-idle-mismatch`
+- 同步主 specs，勾选 tasks，并完成 change archive
+
+## 主要改动
+- 新增主 spec：`openspec/specs/codex-stalled-recovery-contract/spec.md`
+- 同步 stalled recovery 相关 requirement 到：
+  - `openspec/specs/codex-chat-canvas-user-input-elicitation/spec.md`
+  - `openspec/specs/conversation-runtime-stability/spec.md`
+  - `openspec/specs/conversation-lifecycle-contract/spec.md`
+  - `openspec/specs/runtime-pool-console/spec.md`
+- 将 `openspec/changes/fix-codex-stalled-user-input-and-runtime-idle-mismatch/tasks.md` 全部回写为完成态
+- 将该 change 归档到 `openspec/changes/archive/2026-04-21-fix-codex-stalled-user-input-and-runtime-idle-mismatch/`
+
+## 涉及模块
+- OpenSpec change artifacts
+- OpenSpec main specs
+- Trellis workspace journal
+
+## 验证结果
+- `openspec validate fix-codex-stalled-user-input-and-runtime-idle-mismatch --strict` 通过
+- `openspec status --change "fix-codex-stalled-user-input-and-runtime-idle-mismatch" --json` 显示 artifacts 全部 `done`
+- 任务清单统计：15/15 完成
+- `openspec list --json` 确认该 change 已不在活跃列表中
+
+## 后续事项
+- 当前工作区仍有未提交的前端改动：
+  - `src/features/messages/components/Messages.tsx`
+  - `src/styles/layout-swapped-platform-guard.test.ts`
+  - `src/styles/messages.css`
+  - `src/features/messages/components/Messages.windows-render-mitigation.test.tsx`
+- 本次 session record 未归档任何 Trellis task，避免误归档与本次归档无直接映射的任务
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e6ad9549` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

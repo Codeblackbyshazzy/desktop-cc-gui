@@ -791,3 +791,58 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 82: 补齐首条消息隐式建会话 loading
+
+**Date**: 2026-04-21
+**Task**: 补齐首条消息隐式建会话 loading
+**Branch**: `feature/f-v0.4.6`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：补齐新首页/首条消息发送时，若当前还没有对应会话而需后台创建 thread 的用户可见 loading 反馈，避免静默等待造成误判。
+
+主要改动：
+- 在 AppShell 增加 runWithCreateSessionLoading，复用现有 loading progress dialog 与既有 i18n 文案。
+- 通过 useThreads 将 loading runner 以可选参数透传给 useThreadMessaging，保持默认调用方兼容。
+- 在 sendUserMessage 中仅对需要即时新建 thread 的发送路径包裹 loading，包括无 active thread 的首条消息，以及 thread 与当前 engine 不兼容时的新建 thread 发送。
+- 保持普通已有会话 follow-up 发送链路不变，不显示创建会话 loading。
+- 补充 hook 测试，覆盖首发建会话显示 loading 和已有会话 follow-up 不显示 loading。
+
+涉及模块：
+- src/app-shell.tsx
+- src/features/threads/hooks/useThreads.ts
+- src/features/threads/hooks/useThreadMessaging.ts
+- src/features/threads/hooks/useThreadMessaging.test.tsx
+
+验证结果：
+- 通过：npm exec vitest run src/features/threads/hooks/useThreadMessaging.test.tsx
+- 通过：npm exec eslint src/features/threads/hooks/useThreadMessaging.ts src/features/threads/hooks/useThreads.ts src/features/threads/hooks/useThreadMessaging.test.tsx src/app-shell.tsx
+- 未通过但与本次改动无关：npm run typecheck，现有失败点为 src/features/settings/components/settings-view/sections/RuntimePoolSection.test.tsx 缺少 engineObservability 字段。
+
+后续事项：
+- 若需要更强保证，可继续补一条从 AppShell/首页发送入口触发的集成测试，直接断言 loading modal 出现与关闭。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d1bb1639` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AppSettings } from "../../../types";
 import {
   getCodexUnifiedExecExternalStatus,
   readGlobalCodexAuthJson,
@@ -9,7 +8,6 @@ import {
   restoreCodexUnifiedExecOfficialDefault,
   setCodexUnifiedExecOfficialOverride,
 } from "../../../services/tauri";
-import { ask } from "@tauri-apps/plugin-dialog";
 import { VendorSettingsPanel } from "./VendorSettingsPanel";
 
 const mockState = vi.hoisted(() => ({
@@ -124,11 +122,6 @@ vi.mock("../../../services/tauri", async () => {
   };
 });
 
-vi.mock("@tauri-apps/plugin-dialog", () => ({
-  ask: vi.fn(),
-  open: vi.fn(),
-}));
-
 const readGlobalCodexConfigTomlMock = vi.mocked(readGlobalCodexConfigToml);
 const readGlobalCodexAuthJsonMock = vi.mocked(readGlobalCodexAuthJson);
 const getCodexUnifiedExecExternalStatusMock = vi.mocked(
@@ -140,40 +133,27 @@ const restoreCodexUnifiedExecOfficialDefaultMock = vi.mocked(
 const setCodexUnifiedExecOfficialOverrideMock = vi.mocked(
   setCodexUnifiedExecOfficialOverride,
 );
-const askMock = vi.mocked(ask);
-
-const baseSettings = {
-  codexUnifiedExecPolicy: "inherit",
-  experimentalUnifiedExecEnabled: undefined,
-} as AppSettings;
 
 function renderPanel(
   options: {
-    appSettings?: AppSettings;
-    onUpdateAppSettings?: (settings: AppSettings) => Promise<void>;
     handleReloadCodexRuntimeConfig?: () => Promise<void>;
     codexReloadStatus?: "idle" | "reloading" | "applied" | "failed";
     codexReloadMessage?: string | null;
   } = {},
 ) {
-  const onUpdateAppSettings =
-    options.onUpdateAppSettings ?? vi.fn().mockResolvedValue(undefined);
   const handleReloadCodexRuntimeConfig =
     options.handleReloadCodexRuntimeConfig ?? vi.fn().mockResolvedValue(undefined);
 
   render(
     <VendorSettingsPanel
-      appSettings={options.appSettings ?? baseSettings}
       codexReloadStatus={options.codexReloadStatus ?? "idle"}
       codexReloadMessage={options.codexReloadMessage ?? null}
       handleReloadCodexRuntimeConfig={handleReloadCodexRuntimeConfig}
-      onUpdateAppSettings={onUpdateAppSettings}
     />,
   );
 
   return {
     handleReloadCodexRuntimeConfig,
-    onUpdateAppSettings,
   };
 }
 
@@ -213,7 +193,6 @@ beforeEach(() => {
     explicitUnifiedExecValue: true,
     officialDefaultEnabled: true,
   });
-  askMock.mockResolvedValue(true);
 });
 
 afterEach(() => {
@@ -222,38 +201,22 @@ afterEach(() => {
 });
 
 describe("VendorSettingsPanel", () => {
-  it("shows background terminal in the Codex tab with readable policy labels", async () => {
-    renderPanel({
-      appSettings: {
-        ...baseSettings,
-        codexUnifiedExecPolicy: "forceEnabled",
-      } as AppSettings,
-    });
+  it("shows background terminal official actions in the Codex tab", async () => {
+    renderPanel();
 
     await openCodexTab();
 
     expect(screen.getByText("Background terminal")).toBeTruthy();
     expect(screen.getByText("Official config")).toBeTruthy();
-    expect(screen.getByText("Always enable")).toBeTruthy();
-    expect(screen.queryByText("forceEnabled")).toBeNull();
+    expect(screen.getByRole("button", { name: "Enable" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Disable" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Follow official default" })).toBeTruthy();
     expect(
       screen.getByText("Official default on this platform: enabled."),
     ).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("combobox", { name: "Background terminal" }));
-    const forceEnableOption = await screen.findByRole("option", {
-      name: "Always enable",
-    });
-    expect(forceEnableOption).toBeTruthy();
-    expect(
-      screen.getByRole("option", { name: "Follow official default" }),
-    ).toBeTruthy();
-    expect(
-      screen.getByRole("option", { name: "Always disable" }),
-    ).toBeTruthy();
   });
 
-  it("shows legacy override repair actions in the Codex tab and restores on confirm", async () => {
+  it("restores official default without extra confirm dialog", async () => {
     getCodexUnifiedExecExternalStatusMock.mockResolvedValue({
       configPath: "/tmp/codex/config.toml",
       hasExplicitUnifiedExec: true,
@@ -270,24 +233,12 @@ describe("VendorSettingsPanel", () => {
     renderPanel();
     await openCodexTab();
 
-    expect(screen.getByText("Legacy override detected")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "A previous version wrote unified_exec = disabled to the official CODEX_HOME/config.toml. Restore official default to remove that override.",
-      ),
-    ).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Restore official default" }));
+    fireEvent.click(screen.getByRole("button", { name: "Follow official default" }));
 
     await waitFor(() => {
-      expect(askMock).toHaveBeenCalledTimes(1);
       expect(restoreCodexUnifiedExecOfficialDefaultMock).toHaveBeenCalledTimes(1);
     });
-    expect(
-      screen.getByText(
-        "Restored the official unified_exec default and reloaded connected inherit Codex sessions.",
-      ),
-    ).toBeTruthy();
+    expect(screen.getByText("Restored the official unified_exec config.")).toBeTruthy();
   });
 
   it("writes official unified_exec and reloads inherit sessions", async () => {
@@ -302,34 +253,30 @@ describe("VendorSettingsPanel", () => {
     renderPanel({ handleReloadCodexRuntimeConfig });
     await openCodexTab();
 
-    fireEvent.click(screen.getByRole("button", { name: "Write official enabled" }));
+    fireEvent.click(screen.getByRole("button", { name: "Enable" }));
 
     await waitFor(() => {
-      expect(askMock).toHaveBeenCalledTimes(1);
       expect(setCodexUnifiedExecOfficialOverrideMock).toHaveBeenCalledWith(true);
       expect(handleReloadCodexRuntimeConfig).toHaveBeenCalledTimes(1);
     });
-    expect(
-      screen.getByText(
-        "Wrote official unified_exec = enabled and reloaded connected inherit Codex sessions.",
-      ),
-    ).toBeTruthy();
+    expect(screen.getByText("Wrote official unified_exec = enabled.")).toBeTruthy();
   });
 
-  it("does not write official unified_exec when the confirm dialog is cancelled", async () => {
-    askMock.mockResolvedValue(false);
+  it("shows the no-session reload message without an applied prefix", async () => {
+    renderPanel({
+      codexReloadStatus: "applied",
+      codexReloadMessage:
+        "No Codex session is currently connected. The config has been updated and will apply on the next connection.",
+    });
 
-    const handleReloadCodexRuntimeConfig = vi.fn().mockResolvedValue(undefined);
-    renderPanel({ handleReloadCodexRuntimeConfig });
     await openCodexTab();
 
-    fireEvent.click(screen.getByRole("button", { name: "Write official enabled" }));
-
-    await waitFor(() => {
-      expect(askMock).toHaveBeenCalledTimes(1);
-    });
-    expect(setCodexUnifiedExecOfficialOverrideMock).not.toHaveBeenCalled();
-    expect(handleReloadCodexRuntimeConfig).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(
+        "No Codex session is currently connected. The config has been updated and will apply on the next connection.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Codex runtime config applied:/)).toBeNull();
   });
 
   it("refreshes Codex config content and unified_exec status after reload", async () => {

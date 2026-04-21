@@ -15,7 +15,7 @@
 
 `unified_exec` 是 official runtime capability，不是 desktop-local bool flag。
 
-- 桌面端自己的 source of truth 是 `AppSettings.codexUnifiedExecPolicy`
+- 桌面端对外只暴露 official config actions，不再暴露 selector
 - 官方 `~/.codex/config.toml` 只允许被显式 official config action lane 修改
 - 普通 settings save / restore 不得再改写 global config
 
@@ -24,33 +24,24 @@
 ### Rust / TS settings 字段
 
 - 新字段：`codexUnifiedExecPolicy`
-- 可选值：
-  - `inherit`
-  - `forceEnabled`
-  - `forceDisabled`
+- 兼容值仍存在于 Rust / TS contract 中，但当前产品行为必须归一化为 `inherit`
 
 ### Legacy migration
 
 - legacy 字段 `experimentalUnifiedExecEnabled` 只用于兼容旧 settings 输入
 - 迁移规则：
-  - `true` -> `forceEnabled`
-  - `false` 或缺失 -> `inherit`
+  - 任意值 -> `inherit`
 - 迁移完成后不得再把 legacy 字段写回 settings.json / frontend payload
 
 ## Runtime Contract
 
-### Inherit
+当前产品路径不再暴露 desktop-local unified_exec override。
 
-- `inherit` 模式不得注入 `features.unified_exec` runtime override
-- Codex 最终行为交给：
+- runtime 默认跟随：
   - external/global config 中的显式值
   - official platform default
-
-### Explicit override
-
-- `forceEnabled` / `forceDisabled` 必须通过 launch-scoped runtime override 生效
-- 当前实现位置：`resolve_workspace_codex_args()` -> `-c features.unified_exec=<bool>`
-- 如果用户自定义 `codexArgs` 已经带了 `features.unified_exec=...`，桌面端显式 policy 必须先移除旧值再注入新值
+- official config action 完成后，桌面端 SHOULD 触发 runtime reload
+- 若当前没有已连接 Codex 会话，提示必须为中性结果，而不是错误
 
 ## Global Config Contract
 
@@ -80,12 +71,14 @@
 
 ### Settings UI
 
-- “后台终端”必须是 tri-state selector，不是 bool toggle
+- “后台终端”必须显示为官方配置卡片，不再暴露 tri-state selector
 - UI 必须显示 official default 的平台说明
 - UI 必须额外显示 official config 当前状态与显式 action buttons
-- repair CTA 仅在下面条件同时满足时出现：
-  - `codexUnifiedExecPolicy === "inherit"`
-  - external status 返回 `hasExplicitUnifiedExec === true`
+- action buttons 固定为：
+  - 启用
+  - 停用
+  - 跟随官方默认
+- reload 成功但无连接会话时，界面不得拼接 `failed` / `applied` 前缀制造误解
 
 ### Command bridge
 
@@ -106,12 +99,11 @@
   - 普通 settings save 不写 global config
   - external status / repair helper
   - explicit global config write helper
-  - runtime arg override 替换已有 `features.unified_exec`
 - Frontend:
-  - hook 归一化 legacy bool -> tri-state
-  - vendor settings 渲染 tri-state + official default + official config actions
-  - explicit official config action 在 `inherit` 模式下会触发 runtime reload
-  - restore flow 只有确认后才调用 global config mutation command
+  - hook 归一化 legacy bool -> inherit
+  - vendor settings 渲染 official default + official config actions
+  - explicit official config action 会触发 runtime reload
+  - no-session reload 文案不带错误前缀
 
 ## 变更触发器
 
@@ -119,6 +111,5 @@
 
 - `AppSettings` 字段结构
 - `src/services/tauri.ts` settings 相关 command
-- `resolve_workspace_codex_args()` 行为
-- experimental settings UI
+- vendor settings UI
 - global Codex config repair 流程

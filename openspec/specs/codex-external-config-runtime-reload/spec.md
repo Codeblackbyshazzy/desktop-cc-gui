@@ -52,7 +52,7 @@ Introducing runtime reload MUST NOT clear or isolate Codex history list visibili
 
 ### Requirement: External Config Reload MUST Respect Official Ownership Boundary
 
-Codex external config reload 与 settings 恢复流程 MUST 只在 unified_exec policy 为 `inherit` 时消费 official external config 字段；一旦用户设置 explicit unified_exec override，桌面端 runtime 行为 MUST 由本地策略优先，而不是再要求 global config mutation。
+Codex external config reload 与 settings 恢复流程 MUST 消费 official external config 字段，但 MUST NOT 再依赖 desktop-local unified_exec selector / override 语义。
 
 #### Scenario: runtime reload ignores historical private feature flags
 
@@ -64,22 +64,13 @@ Codex external config reload 与 settings 恢复流程 MUST 只在 unified_exec 
 #### Scenario: inherit mode continues to consume official unified_exec
 
 - **GIVEN** `~/.codex/config.toml` 中存在 official `unified_exec`
-- **AND** unified_exec policy 为 `inherit`
 - **WHEN** 系统执行 external config reload
 - **THEN** 系统 MUST 继续消费该 official external config 字段
 - **AND** 该字段的处理路径 MUST 与 private flags 分离
 
-#### Scenario: explicit override wins during reload and restore
-
-- **GIVEN** unified_exec policy 为 `force_enabled` 或 `force_disabled`
-- **AND** `~/.codex/config.toml` 中存在 official `unified_exec`
-- **WHEN** 系统执行 external config reload 或 settings restore
-- **THEN** 桌面端为自身启动的 Codex runtime 计算的 unified_exec 行为 MUST 以本地 explicit override 为准
-- **AND** 系统 MUST NOT 通过普通 reload / restore 流程回写 global config 以实现该优先级
-
 ### Requirement: Desktop Settings MUST NOT Backfill Private Flags Into External Config
 
-桌面端更新 app-local settings 时 MUST NOT 再把私有或遗留开关写入 `~/.codex/config.toml`；普通 settings save 同样 MUST NOT 再回填 official `unified_exec`。
+桌面端更新 app-local settings 时 MUST NOT 再把私有或遗留开关写入 `~/.codex/config.toml`；只有显式 official config action lane 才 MAY 写入或删除 `unified_exec`。
 
 #### Scenario: updating local collaboration settings does not write private flags
 
@@ -92,13 +83,19 @@ Codex external config reload 与 settings 恢复流程 MUST 只在 unified_exec 
 - **THEN** 系统 MUST NOT 向 `~/.codex/config.toml` 写入 `collab`
 - **AND** MUST NOT 通过 external config 重新引入该死字段
 
-#### Scenario: generic settings save does not backfill unified_exec
+#### Scenario: generic settings save still does not backfill unified_exec
 
-- **WHEN** 用户执行普通 settings save、settings restore 或非 repair 的 runtime reload
+- **WHEN** 用户执行普通 settings save 或 settings restore
 - **THEN** 系统 MUST NOT 向 `~/.codex/config.toml` 写入或覆盖 `unified_exec`
 
-#### Scenario: explicit repair action is the only allowed global config mutation path
+#### Scenario: explicit official config action may set unified_exec true or false
 
-- **WHEN** 桌面端需要帮助用户恢复 official default unified_exec 行为
-- **THEN** 只有显式 repair action 才 MAY 修改 `~/.codex/config.toml`
-- **AND** 该修改 MUST 以用户确认作为前提
+- **WHEN** 用户点击官方配置动作按钮并选择写入 enabled 或 disabled
+- **THEN** 系统 MAY 向 `~/.codex/config.toml` 写入显式 `unified_exec`
+- **AND** 该 mutation MUST 与普通 settings save 路径分离
+
+#### Scenario: explicit official config action reloads runtime when possible
+
+- **WHEN** 用户成功执行 official config action
+- **THEN** 桌面端 SHOULD 刷新当前 Codex runtime config
+- **AND** 如果当前没有已连接会话，界面 MUST 反馈“下次连接时生效”，而不是 failed

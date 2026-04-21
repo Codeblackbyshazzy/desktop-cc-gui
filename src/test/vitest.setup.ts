@@ -428,13 +428,11 @@ vi.mock("react-i18next", () => ({
           "This already feeds the main interaction path and is enabled by default; keep it on if you want Plan mode.",
         "settings.backgroundTerminal": "Background terminal",
         "settings.backgroundTerminalDesc":
-          "Follow the official unified_exec default, or apply a desktop-only override for this app's Codex launches.",
+          "Edit the official CODEX_HOME/config.toml unified_exec directly.",
         "settings.backgroundTerminalMarkerDesc":
-          "This setting no longer rewrites the global CODEX_HOME/config.toml during normal settings saves.",
-        "settings.backgroundTerminalApplyHint":
-          "Changes apply immediately to connected Codex sessions. No extra button is required.",
+          'Click "Enable" to write true, "Disable" to write false, and "Follow official default" to remove that explicit config line.',
         "settings.backgroundTerminalOfficialActionsDesc":
-          "The buttons below edit the official CODEX_HOME/config.toml directly rather than the desktop-local override policy.",
+          "After each change, the app will try to refresh Codex. If no session is connected, the change applies on the next connection.",
         "settings.backgroundTerminalOptionInherit": "Follow official default",
         "settings.backgroundTerminalOptionForceEnable": "Always enable",
         "settings.backgroundTerminalOptionForceDisable": "Always disable",
@@ -450,49 +448,21 @@ vi.mock("react-i18next", () => ({
           "Official config status: explicit unified_exec = disabled.",
         "settings.backgroundTerminalOfficialConfigInvalid":
           "Official config status: an explicit unified_exec entry exists, but its value is invalid.",
-        "settings.backgroundTerminalOfficialConfigInheritHint":
-          'Desktop policy is currently "Follow official default", so the official config actions below will also refresh the current Codex runtime.',
-        "settings.backgroundTerminalOfficialConfigDesktopOverrideHint":
-          "Desktop policy is currently forced locally, so the official config actions below update the file but do not replace the selector semantics.",
         "settings.backgroundTerminalValueEnabled": "enabled",
         "settings.backgroundTerminalValueDisabled": "disabled",
-        "settings.backgroundTerminalRepairTitle": "Legacy override detected",
-        "settings.backgroundTerminalRepairDesc":
-          "A previous version wrote unified_exec = {{value}} to the official CODEX_HOME/config.toml. Restore official default to remove that override.",
-        "settings.backgroundTerminalRepairDescUnknown":
-          "A previous version wrote an explicit unified_exec entry to the official CODEX_HOME/config.toml. Restore official default to remove that override.",
-        "settings.backgroundTerminalRepairKeep": "Keep current override",
-        "settings.backgroundTerminalRepairRestore": "Restore official default",
-        "settings.backgroundTerminalRepairConfirm":
-          "Remove the explicit unified_exec entry from the official CODEX_HOME/config.toml and return to the platform default?",
-        "settings.backgroundTerminalRepairSuccess":
-          "Restored the official unified_exec default.",
-        "settings.backgroundTerminalRepairAppliedSuccess":
-          "Restored the official unified_exec default and reloaded connected inherit Codex sessions.",
-        "settings.backgroundTerminalRepairStoredSuccess":
-          "Restored the official unified_exec default; the desktop app is still controlled by its local override policy.",
-        "settings.backgroundTerminalApplySuccess":
-          "Applied to connected Codex sessions.",
-        "settings.backgroundTerminalOfficialWriteTitle":
-          "Write official unified_exec config",
-        "settings.backgroundTerminalOfficialWriteEnabled":
-          "Write official enabled",
-        "settings.backgroundTerminalOfficialWriteDisabled":
-          "Write official disabled",
-        "settings.backgroundTerminalOfficialWriteEnableConfirm":
-          "Write unified_exec = true to the official CODEX_HOME/config.toml? This may affect other Codex clients that read the same config.",
-        "settings.backgroundTerminalOfficialWriteDisableConfirm":
-          "Write unified_exec = false to the official CODEX_HOME/config.toml? This may affect other Codex clients that read the same config.",
-        "settings.backgroundTerminalOfficialWriteEnabledApplied":
-          "Wrote official unified_exec = enabled and reloaded connected inherit Codex sessions.",
-        "settings.backgroundTerminalOfficialWriteDisabledApplied":
-          "Wrote official unified_exec = disabled and reloaded connected inherit Codex sessions.",
-        "settings.backgroundTerminalOfficialWriteEnabledStored":
-          "Wrote official unified_exec = enabled; the desktop app is still controlled by its local override policy.",
-        "settings.backgroundTerminalOfficialWriteDisabledStored":
-          "Wrote official unified_exec = disabled; the desktop app is still controlled by its local override policy.",
+        "settings.backgroundTerminalFollowOfficial": "Follow official default",
+        "settings.backgroundTerminalOfficialWriteEnabled": "Enable",
+        "settings.backgroundTerminalOfficialWriteDisabled": "Disable",
+        "settings.backgroundTerminalOfficialWriteEnabledSuccess":
+          "Wrote official unified_exec = enabled.",
+        "settings.backgroundTerminalOfficialWriteDisabledSuccess":
+          "Wrote official unified_exec = disabled.",
+        "settings.backgroundTerminalFollowOfficialSuccess":
+          "Restored the official unified_exec config.",
         "settings.backgroundTerminalOfficialWriteReloadFailed":
           "Official unified_exec was written, but refreshing the current Codex runtime failed: {{message}}",
+        "settings.codexRuntimeReloadNoConnectedSessions":
+          "No Codex session is currently connected. The config has been updated and will apply on the next connection.",
         "settings.steerMode": "Follow-up fusion",
         "settings.steerModeDesc":
           "When enabled: keep asking follow-ups while a response is streaming, queue them automatically, and fuse them into the current answer when available.",

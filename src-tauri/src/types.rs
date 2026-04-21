@@ -1279,13 +1279,7 @@ fn default_codex_warm_ttl_seconds() -> u16 {
 
 impl AppSettings {
     pub(crate) fn normalize_unified_exec_policy(&mut self) {
-        if matches!(
-            self.codex_unified_exec_policy,
-            CodexUnifiedExecPolicy::Inherit
-        ) && self.experimental_unified_exec_enabled == Some(true)
-        {
-            self.codex_unified_exec_policy = CodexUnifiedExecPolicy::ForceEnabled;
-        }
+        self.codex_unified_exec_policy = CodexUnifiedExecPolicy::Inherit;
         self.experimental_unified_exec_enabled = None;
     }
 

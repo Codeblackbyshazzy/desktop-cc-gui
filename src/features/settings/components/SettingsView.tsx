@@ -1344,10 +1344,12 @@ export function SettingsView({
     setCodexRuntimeReloadState({ status: "reloading", message: null });
     try {
       const result = await reloadCodexRuntimeConfig();
-      const defaultMessage = t("settings.codexRuntimeReloadAppliedCount", {
-        count: result.restartedSessions,
-      });
-      const message = result.message?.trim() || defaultMessage;
+      const message =
+        result.restartedSessions === 0
+          ? t("settings.codexRuntimeReloadNoConnectedSessions")
+          : t("settings.codexRuntimeReloadAppliedCount", {
+              count: result.restartedSessions,
+            });
       setCodexRuntimeReloadState({ status: "applied", message });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -2198,11 +2200,9 @@ export function SettingsView({
             )}
             {activeSection === "providers" && (
               <VendorSettingsPanel
-                appSettings={appSettings}
                 codexReloadStatus={codexRuntimeReloadState.status}
                 codexReloadMessage={codexRuntimeReloadState.message}
                 handleReloadCodexRuntimeConfig={handleReloadCodexRuntimeConfig}
-                onUpdateAppSettings={onUpdateAppSettings}
               />
             )}
             {activeSection === "usage" && (

@@ -1443,13 +1443,11 @@ const enPart1 = {
       "This already feeds the main interaction path and is enabled by default; keep it on if you want Plan mode.",
     backgroundTerminal: "Background terminal",
     backgroundTerminalDesc:
-      "Follow the official unified_exec default, or apply a desktop-only override for this app's Codex launches.",
+      "Edit the official CODEX_HOME/config.toml unified_exec directly.",
     backgroundTerminalMarkerDesc:
-      "This setting no longer rewrites the global CODEX_HOME/config.toml during normal settings saves.",
-    backgroundTerminalApplyHint:
-      "Changes apply immediately to connected Codex sessions. No extra button is required.",
+      'Click "Enable" to write true, "Disable" to write false, and "Follow official default" to remove that explicit config line.',
     backgroundTerminalOfficialActionsDesc:
-      "The buttons below edit the official CODEX_HOME/config.toml directly rather than the desktop-local override policy.",
+      "After each change, the app will try to refresh Codex. If no session is connected, the change applies on the next connection.",
     backgroundTerminalOptionInherit: "Follow official default",
     backgroundTerminalOptionForceEnable: "Always enable",
     backgroundTerminalOptionForceDisable: "Always disable",
@@ -1463,44 +1461,21 @@ const enPart1 = {
       "Official config status: explicit unified_exec = disabled.",
     backgroundTerminalOfficialConfigInvalid:
       "Official config status: an explicit unified_exec entry exists, but its value is invalid.",
-    backgroundTerminalOfficialConfigInheritHint:
-      'Desktop policy is currently "Follow official default", so the official config actions below will also refresh the current Codex runtime.',
-    backgroundTerminalOfficialConfigDesktopOverrideHint:
-      "Desktop policy is currently forced locally, so the official config actions below update the file but do not replace the selector semantics.",
     backgroundTerminalValueEnabled: "enabled",
     backgroundTerminalValueDisabled: "disabled",
-    backgroundTerminalRepairTitle: "Legacy override detected",
-    backgroundTerminalRepairDesc:
-      "A previous version wrote unified_exec = {{value}} to the official CODEX_HOME/config.toml. Restore official default to remove that override.",
-    backgroundTerminalRepairDescUnknown:
-      "A previous version wrote an explicit unified_exec entry to the official CODEX_HOME/config.toml. Restore official default to remove that override.",
-    backgroundTerminalRepairKeep: "Keep current override",
-    backgroundTerminalRepairRestore: "Restore official default",
-    backgroundTerminalRepairConfirm:
-      "Remove the explicit unified_exec entry from the official CODEX_HOME/config.toml and return to the platform default?",
-    backgroundTerminalRepairSuccess: "Restored the official unified_exec default.",
-    backgroundTerminalRepairAppliedSuccess:
-      "Restored the official unified_exec default and reloaded connected inherit Codex sessions.",
-    backgroundTerminalRepairStoredSuccess:
-      "Restored the official unified_exec default; the desktop app is still controlled by its local override policy.",
-    backgroundTerminalApplySuccess: "Applied to connected Codex sessions.",
-    backgroundTerminalOfficialWriteTitle: "Write official unified_exec config",
-    backgroundTerminalOfficialWriteEnabled: "Write official enabled",
-    backgroundTerminalOfficialWriteDisabled: "Write official disabled",
-    backgroundTerminalOfficialWriteEnableConfirm:
-      "Write unified_exec = true to the official CODEX_HOME/config.toml? This may affect other Codex clients that read the same config.",
-    backgroundTerminalOfficialWriteDisableConfirm:
-      "Write unified_exec = false to the official CODEX_HOME/config.toml? This may affect other Codex clients that read the same config.",
-    backgroundTerminalOfficialWriteEnabledApplied:
-      "Wrote official unified_exec = enabled and reloaded connected inherit Codex sessions.",
-    backgroundTerminalOfficialWriteDisabledApplied:
-      "Wrote official unified_exec = disabled and reloaded connected inherit Codex sessions.",
-    backgroundTerminalOfficialWriteEnabledStored:
-      "Wrote official unified_exec = enabled; the desktop app is still controlled by its local override policy.",
-    backgroundTerminalOfficialWriteDisabledStored:
-      "Wrote official unified_exec = disabled; the desktop app is still controlled by its local override policy.",
+    backgroundTerminalFollowOfficial: "Follow official default",
+    backgroundTerminalOfficialWriteEnabled: "Enable",
+    backgroundTerminalOfficialWriteDisabled: "Disable",
+    backgroundTerminalOfficialWriteEnabledSuccess:
+      "Wrote official unified_exec = enabled.",
+    backgroundTerminalOfficialWriteDisabledSuccess:
+      "Wrote official unified_exec = disabled.",
+    backgroundTerminalFollowOfficialSuccess:
+      "Restored the official unified_exec config.",
     backgroundTerminalOfficialWriteReloadFailed:
       "Official unified_exec was written, but refreshing the current Codex runtime failed: {{message}}",
+    codexRuntimeReloadNoConnectedSessions:
+      "No Codex session is currently connected. The config has been updated and will apply on the next connection.",
     steerMode: "Follow-up fusion",
     steerModeDesc:
       "When enabled: keep asking follow-ups while a response is streaming, queue them automatically, and fuse them into the current answer when available.",

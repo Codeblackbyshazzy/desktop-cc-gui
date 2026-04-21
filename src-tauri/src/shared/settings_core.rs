@@ -358,7 +358,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_app_settings_core_migrates_legacy_unified_exec_true_to_force_enabled() {
+    async fn get_app_settings_core_resets_legacy_unified_exec_true_to_inherit() {
         let mut settings = AppSettings::default();
         settings.experimental_unified_exec_enabled = Some(true);
 
@@ -366,7 +366,7 @@ mod tests {
 
         assert_eq!(
             resolved.codex_unified_exec_policy,
-            CodexUnifiedExecPolicy::ForceEnabled
+            CodexUnifiedExecPolicy::Inherit
         );
         assert_eq!(resolved.experimental_unified_exec_enabled, None);
     }

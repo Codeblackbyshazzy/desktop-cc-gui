@@ -6,8 +6,9 @@
 ## 2. Frontend official config actions
 
 - [x] 2.1 [P0] 在 `VendorSettingsPanel` 增加 official config 状态文案与三个显式按钮，动作后刷新 config/status。
-- [x] 2.2 [P0] 在 `inherit` 模式下，official config action 成功后自动 reload 当前 Codex runtime；在 desktop explicit override 模式下显示优先级提示。
-- [x] 2.3 [P0] 更新 i18n、service wrapper 与 Vitest。
+- [x] 2.2 [P0] 移除 unified_exec selector，卡片只保留官方配置状态与三个动作按钮。
+- [x] 2.3 [P0] official config action 成功后自动 reload 当前 Codex runtime；无连接会话时显示中性提示，不表现成错误。
+- [x] 2.4 [P0] 更新 i18n、service wrapper 与 Vitest。
 
 ## 3. Verification
 

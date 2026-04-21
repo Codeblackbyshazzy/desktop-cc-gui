@@ -555,3 +555,55 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 78: 拆分消息历史吸顶样式文件
+
+**Date**: 2026-04-21
+**Task**: 拆分消息历史吸顶样式文件
+**Branch**: `feature/f-v0.4.6`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：
+- 将消息历史吸顶样式从主样式文件中按模块拆分出来。
+- 降低 messages.css 的体积与耦合，避免继续堆积在单文件中。
+
+主要改动：
+- 新增 src/styles/messages.history-sticky.css，承接历史用户气泡吸顶头部的全部样式。
+- 在 src/styles/messages.css 中通过 @import 引入新文件。
+- 删除 messages.css 中已迁移的吸顶样式定义，保持 class 名与渲染结构不变。
+
+涉及模块：
+- src/styles/messages.css
+- src/styles/messages.history-sticky.css
+
+验证结果：
+- npm run check:large-files
+
+后续事项：
+- 继续提交 OpenSpec 提案文档。
+- 如后续还有 messages 相关扩展样式，可继续按模块拆分，避免重新涨回大文件。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `47b015d311e07a512360785494e6d56c52ba2c00` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

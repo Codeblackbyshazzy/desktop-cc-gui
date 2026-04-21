@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 77
+- **Total Sessions**: 78
 - **Last Active**: 2026-04-21
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~557 | Active |
+| `journal-3.md` | ~609 | Active |
 | `journal-2.md` | ~1960 | Archived |
 | `journal-1.md` | ~1990 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 78 | 2026-04-21 | 拆分消息历史吸顶样式文件 | `47b015d311e07a512360785494e6d56c52ba2c00` | `feature/f-v0.4.6` |
 | 77 | 2026-04-21 | 统一 Codex unified_exec 策略与官方配置治理 | `c1ad7eb83538ed3162add3e3ac17ed946802955b` | `feature/f-v0.4.6` |
 | 76 | 2026-04-21 | 归档已验证 OpenSpec 提案并回写主 specs | `bd480ff2258459dd5956e30c29e9c00a185ae112` | `feature/f-v0.4.6` |
 | 75 | 2026-04-21 | 归档历史吸顶用户气泡任务 | `b5222086` | `feature/f-v0.4.6` |

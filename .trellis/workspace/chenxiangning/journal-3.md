@@ -1023,3 +1023,59 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 86: runtime 与 thread actions 大文件模块拆分治理
+
+**Date**: 2026-04-21
+**Task**: runtime 与 thread actions 大文件模块拆分治理
+**Branch**: `feature/f-v0.4.6`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标:
+- 将 large-file gate 报警的 3 个超阈值文件按模块拆分，保持 facade 与行为不变。
+- 让 runtime/mod.rs、useThreadActions.ts、useThreadActions.test.tsx 全部回到 3000 行 hard gate 以内。
+
+主要改动:
+- 抽离 src-tauri/src/runtime/process_diagnostics.rs，承接 process snapshot、engine observability、pid tree terminate 与 diagnostics 汇总逻辑。
+- 保留 src-tauri/src/runtime/mod.rs 作为 runtime registry / state machine / command facade，更新 runtime tests 对新模块的引用。
+- 抽离 src/features/threads/hooks/useThreadActions.sessionActions.ts，承接 shared session start、archive/delete、rename title mapping 等 session mutation 动作。
+- 抽离 src/features/threads/hooks/useThreadActions.test-utils.tsx，承接 useThreadActions 测试公共 workspace / renderActions / setThreads 断言辅助。
+- 保持 useThreadActions 主 hook 对外返回 contract 不变，仅做结构搬移。
+
+涉及模块:
+- src-tauri/src/runtime/*
+- src/features/threads/hooks/useThreadActions*
+
+验证结果:
+- 通过: npm run check:large-files
+- 通过: npm run typecheck
+- 通过: npx vitest run src/features/threads/hooks/useThreadActions.test.tsx
+- 通过: cargo test --manifest-path src-tauri/Cargo.toml runtime::tests:: -- --nocapture
+
+后续事项:
+- 如果 threads/runtime 继续膨胀，下一轮优先沿现有 facade 继续抽 list/recovery 子层，避免再次回堆到单文件。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `643252092ca5359e507490c8e2071aa69cdf65b3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

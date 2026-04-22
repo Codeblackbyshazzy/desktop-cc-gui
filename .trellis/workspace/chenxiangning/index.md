@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 94
+- **Total Sessions**: 95
 - **Last Active**: 2026-04-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~1569 | Active |
+| `journal-3.md` | ~1627 | Active |
 | `journal-2.md` | ~1960 | Archived |
 | `journal-1.md` | ~1990 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 95 | 2026-04-22 | 增强运行时提示与融合续跑收口 | `292147259ed56c835ffefb2c5556b2185ddea4f0` | `feature/v-0.4.7` |
 | 94 | 2026-04-22 | Checkpoint fusion stalled continuity | `486cf0388c6fd9dadc1836d3650e05cea50e87fd` | `feature/v-0.4.7` |
 | 93 | 2026-04-22 | 完善会话恢复 toast 链路并修复边界问题 | `01632817` | `feature/v-0.4.7` |
 | 92 | 2026-04-22 | 统一消息吸顶并补齐会话恢复重试 | `daab536b8115d8e84f66c0d306d7207fafa7c8f6` | `feature/v-0.4.7` |

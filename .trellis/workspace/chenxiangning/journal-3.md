@@ -1567,3 +1567,61 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 95: 增强运行时提示与融合续跑收口
+
+**Date**: 2026-04-22
+**Task**: 增强运行时提示与融合续跑收口
+**Branch**: `feature/v-0.4.7`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：完善全局 runtime notice dock、Codex fusion continuation 收口语义，并在 review 中修复 engine/sidebar/workspace 相关边界条件与跨平台兼容问题。
+
+主要改动：
+- 新增 global runtime notice 服务、dock 组件、runtime pool 轮询 hook、样式与 OpenSpec change，统一展示 bootstrap、runtime、workspace、diagnostic 提示。
+- 完成 fix-codex-fusion-stalled-continuity 变更，实现 same-run 与 cutover fusion 的 bounded settlement，补齐 continuation/terminal pulse 收口与 runtime continuity 测试。
+- 修复 app-shell layout section 中遗漏的 refreshEngines 作用域问题，避免前端运行时 ReferenceError。
+- 修复 opencode detect fallback 在 detectEngines 缺失状态行时无法补全 installed 状态的问题。
+- 修复 workspace session create 在 Windows CLI not found 场景下的错误本地化，并改进单独刷新 engine 后基于最新快照继续判定 provider health。
+
+涉及模块：
+- frontend app shell / layout / sidebar / workspace actions / engine controller / notifications / bootstrap
+- threads fusion continuity hooks 与 reducer
+- runtime Rust tests
+- OpenSpec changes: add-global-runtime-notice-dock, fix-codex-fusion-stalled-continuity
+
+验证结果：
+- npx vitest run src/features/app/hooks/useSidebarMenus.test.tsx src/features/engine/hooks/useEngineController.test.tsx src/features/app/hooks/useWorkspaceActions.test.tsx src/bootstrapApp.test.tsx
+- npx vitest run src/features/threads/hooks/useQueuedSend.test.tsx src/features/threads/hooks/useThreadTurnEvents.test.tsx src/features/app/hooks/useAppServerEvents.turn-stalled.test.tsx
+- cargo test --manifest-path src-tauri/Cargo.toml terminal_turn_events_clear_foreground_resume_pending_continuity -- --nocapture
+- cargo test --manifest-path src-tauri/Cargo.toml record_runtime_ended_clears_leases_and_persists_exit_diagnostics -- --nocapture
+- npm run typecheck
+- npm run check:large-files
+
+后续事项：
+- 如需发布前进一步收口，可追加一次更广覆盖的 targeted suite 或人工验证 global runtime notice dock 的交互态。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `292147259ed56c835ffefb2c5556b2185ddea4f0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

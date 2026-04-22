@@ -648,3 +648,61 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 114: 收口 assistant 最终回复近似重复段落去重
+
+**Date**: 2026-04-22
+**Task**: 收口 assistant 最终回复近似重复段落去重
+**Branch**: `feature/v-0.4.7`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：review 当前工作区并修复 Codex/Claude 长任务 completed payload 在最终气泡中偶发双份大段输出的问题，同时满足 large-file governance 约束。
+
+主要改动：
+- 新增 src/utils/assistantDuplicateParagraphs.ts，统一处理近似重复 paragraph halves / repeated blocks / existing-vs-completed 变体合并。
+- 在 src/features/threads/hooks/threadReducerTextMerge.ts 的 completeAgentMessage 收口链路中接入 paragraph 级近似合并，并在 completed 文本 normalize 前先尝试折叠 raw completed payload。
+- 在 src/utils/threadItems.ts 的 assistant normalize 链路复用同一 helper，保证 live、completed、history restore 三条路径语义一致。
+- 新增 src/features/threads/hooks/useThreadsReducer.completed-duplicate.test.ts，并补强 threadReducerTextMerge.test.ts，覆盖大段 final 输出双份且带轻微改写的回归场景。
+- 清理误生成的异常根目录文件，避免污染工作区与跨平台文件遍历。
+
+涉及模块：
+- src/features/threads/hooks/threadReducerTextMerge.ts
+- src/utils/threadItems.ts
+- src/utils/assistantDuplicateParagraphs.ts
+- src/features/threads/hooks/useThreadsReducer.completed-duplicate.test.ts
+- src/features/threads/hooks/threadReducerTextMerge.test.ts
+
+验证结果：
+- npm exec vitest run src/features/threads/hooks/threadReducerTextMerge.test.ts src/features/threads/hooks/useThreadsReducer.completed-duplicate.test.ts src/features/threads/hooks/useThreadsReducer.inline-code.test.ts src/utils/threadItems.test.ts src/features/threads/hooks/useThreadsReducer.test.ts 通过（177 passed）。
+- npm run check:large-files 通过，src/utils/threadItems.ts 回落到 2983 行，large-file gate found=0。
+- npm exec eslint src/features/threads/hooks/threadReducerTextMerge.ts src/features/threads/hooks/threadReducerTextMerge.test.ts src/features/threads/hooks/useThreadsReducer.completed-duplicate.test.ts src/utils/threadItems.ts src/utils/assistantDuplicateParagraphs.ts 通过。
+- npm run typecheck 通过。
+- npm run lint 通过，无 error；仓库现存 react-hooks warnings 仍存在，但不是本次改动新增。
+
+后续事项：
+- 若后续仍观察到最终输出重复，可继续把 assistant duplicate helper 扩展到 sentence-level near-duplicate 与 history assembler 的统一 contract。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6c0d1606` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

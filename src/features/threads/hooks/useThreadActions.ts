@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import type { Dispatch, MutableRefObject } from "react";
 import type {
   ConversationItem,
@@ -261,8 +261,8 @@ export function useThreadActions({
     [],
   );
 
-  const renameThreadTitleMapping = useCallback(
-    createRenameThreadTitleMappingAction({
+  const renameThreadTitleMapping = useMemo(
+    () => createRenameThreadTitleMappingAction({
       getCustomName,
       onRenameThreadTitleMapping,
     }),
@@ -1061,6 +1061,7 @@ export function useThreadActions({
       onDebug,
       rememberThreadAlias,
       replaceOnResumeRef,
+      threadActivityRef,
       threadStatusById,
       threadsByWorkspace,
       userInputRequests,
@@ -2143,23 +2144,23 @@ export function useThreadActions({
     ],
   );
 
-  const archiveThread = useCallback(
-    createArchiveThreadAction({ onDebug }),
+  const archiveThread = useMemo(
+    () => createArchiveThreadAction({ onDebug }),
     [onDebug],
   );
 
-  const archiveClaudeThread = useCallback(
-    createArchiveClaudeThreadAction({ onDebug, workspacePathsByIdRef }),
-    [onDebug],
+  const archiveClaudeThread = useMemo(
+    () => createArchiveClaudeThreadAction({ onDebug, workspacePathsByIdRef }),
+    [onDebug, workspacePathsByIdRef],
   );
 
-  const deleteThreadForWorkspace = useCallback(
-    createDeleteThreadForWorkspaceAction({
+  const deleteThreadForWorkspace = useMemo(
+    () => createDeleteThreadForWorkspaceAction({
       archiveClaudeThread,
       threadsByWorkspace,
       workspacePathsByIdRef,
     }),
-    [archiveClaudeThread, threadsByWorkspace],
+    [archiveClaudeThread, threadsByWorkspace, workspacePathsByIdRef],
   );
 
   return {

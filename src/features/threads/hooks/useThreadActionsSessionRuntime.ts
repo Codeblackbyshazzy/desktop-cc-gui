@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import type { Dispatch, MutableRefObject } from "react";
 
 import type { DebugEntry } from "../../../types";
@@ -226,8 +226,8 @@ export function useThreadActionsSessionRuntime({
     [dispatch, loadedThreadsRef, onDebug],
   );
 
-  const startSharedSessionForWorkspace = useCallback(
-    createStartSharedSessionForWorkspace({
+  const startSharedSessionForWorkspace = useMemo(
+    () => createStartSharedSessionForWorkspace({
       dispatch,
       extractThreadId,
       loadedThreadsRef,

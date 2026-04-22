@@ -1,14 +1,13 @@
 # Large File Near-Threshold Watchlist
 
-- Generated at: 2026-04-22T17:37:50.166Z
+- Generated at: 2026-04-22T17:54:39.669Z
 - Scope: warn
 - Policy version: 2026-04-22.policy-v2
-- Count: 27
+- Count: 26
 
 | File | Lines | Type | Policy | Priority | Warn | Fail | Severity | Status | Baseline | Delta |
 |---|---:|---|---|---|---:|---:|---|---|---:|---:|
 | `src/features/threads/hooks/useThreadActions.test.tsx` | 2995 | ts/tsx | test-files | P2 | 2600 | 3000 | warn | watch |  |  |
-| `src-tauri/src/engine/commands.rs` | 2976 | rust | bridge-runtime-critical | P0 | 2200 | 2600 | fail | captured |  |  |
 | `src/features/app/hooks/useAppServerEvents.test.tsx` | 2966 | ts/tsx | test-files | P2 | 2600 | 3000 | warn | watch |  |  |
 | `src/features/threads/hooks/useThreadsReducer.test.ts` | 2961 | ts/tsx | test-files | P2 | 2600 | 3000 | warn | watch |  |  |
 | `src-tauri/src/local_usage.rs` | 2929 | rust | default-source | P1 | 2600 | 3000 | warn | watch |  |  |

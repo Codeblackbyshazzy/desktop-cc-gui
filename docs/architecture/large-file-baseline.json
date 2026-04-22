@@ -1,16 +1,6 @@
 {
-  "generatedAt": "2026-04-22T17:37:49.728Z",
+  "generatedAt": "2026-04-22T17:54:39.257Z",
   "scope": "fail",
   "policyVersion": "2026-04-22.policy-v2",
-  "entries": [
-    {
-      "path": "src-tauri/src/engine/commands.rs",
-      "lines": 2976,
-      "type": "rust",
-      "policyId": "bridge-runtime-critical",
-      "priority": "P0",
-      "warnThreshold": 2200,
-      "failThreshold": 2600
-    }
-  ]
+  "entries": []
 }

@@ -7,6 +7,7 @@ import type {
   ConversationItem,
   QueuedMessage,
 } from "../../../types";
+import type { StreamMitigationProfile } from "../../threads/utils/streamLatencyDiagnostics";
 import type { GroupedEntry } from "../utils/groupToolItems";
 import { parseAgentTaskNotification } from "../utils/agentTaskNotification";
 import type { PresentationProfile } from "../presentation/presentationProfile";
@@ -98,6 +99,7 @@ type MessagesTimelineProps = {
   requestAutoScroll: () => void;
   selectedExitPlanExecutionByItemKey: Record<string, Extract<AccessMode, "default" | "full-access">>;
   showFileLinkMenu?: (event: React.MouseEvent, path: string) => void;
+  streamMitigationProfile: StreamMitigationProfile | null;
   streamActivityPhase: "idle" | "waiting" | "ingress";
   threadId: string | null;
   toggleExpanded: (id: string) => void;
@@ -155,6 +157,7 @@ export function MessagesTimeline({
   requestAutoScroll,
   selectedExitPlanExecutionByItemKey,
   showFileLinkMenu,
+  streamMitigationProfile,
   streamActivityPhase,
   threadId,
   toggleExpanded,
@@ -252,6 +255,7 @@ export function MessagesTimeline({
               codeBlockCopyUseModifier={codeBlockCopyUseModifier}
               onOpenFileLink={openFileLink}
               onOpenFileLinkMenu={showFileLinkMenu}
+              streamMitigationProfile={streamMitigationProfile}
             />
           </div>
           {shouldRenderFinalBoundary && (
@@ -288,6 +292,7 @@ export function MessagesTimeline({
           onToggle={toggleExpanded}
           onOpenFileLink={openFileLink}
           onOpenFileLinkMenu={showFileLinkMenu}
+          streamMitigationProfile={streamMitigationProfile}
         />
       );
     }
@@ -426,6 +431,7 @@ export function MessagesTimeline({
             onToggle={toggleExpanded}
             onOpenFileLink={openFileLink}
             onOpenFileLinkMenu={showFileLinkMenu}
+            streamMitigationProfile={streamMitigationProfile}
           />
         ))}
         {userInputNode}

@@ -25,6 +25,11 @@ import type { ConversationState } from "../../threads/contracts/conversationCurt
 import { ApprovalToasts } from "../../app/components/ApprovalToasts";
 import { RequestUserInputMessage } from "../../app/components/RequestUserInputMessage";
 import { useStreamActivityPhase } from "../../threads/hooks/useStreamActivityPhase";
+import {
+  noteThreadVisibleRender,
+  resolveActiveThreadStreamMitigation,
+  useThreadStreamLatencySnapshot,
+} from "../../threads/utils/streamLatencyDiagnostics";
 import type { AgentTaskScrollRequest } from "../types";
 import type { PresentationProfile } from "../presentation/presentationProfile";
 import {
@@ -262,6 +267,11 @@ export const Messages = memo(function Messages({
   const heartbeatPulse = conversationState
     ? (effectiveState.meta.heartbeatPulse ?? legacyHeartbeatPulse ?? 0)
     : legacyHeartbeatPulse ?? 0;
+  const threadStreamLatencySnapshot = useThreadStreamLatencySnapshot(threadId);
+  const activeStreamMitigation = useMemo(
+    () => resolveActiveThreadStreamMitigation(threadStreamLatencySnapshot),
+    [threadStreamLatencySnapshot],
+  );
   const latestRuntimeReconnectItemId = useMemo(() => {
     for (let index = items.length - 1; index >= 0; index -= 1) {
       const item = items[index];
@@ -1294,6 +1304,15 @@ export const Messages = memo(function Messages({
     };
   });
 
+  useEffect(() => {
+    if (activeEngine !== "claude" || !isThinking || !threadId) {
+      return;
+    }
+    noteThreadVisibleRender(threadId, {
+      visibleItemCount: renderedItems.length,
+    });
+  }, [activeEngine, isThinking, renderedItems, threadId]);
+
   useEffect(() => clearTransientUiState, [clearTransientUiState]);
 
   useEffect(() => {
@@ -1623,6 +1642,7 @@ export const Messages = memo(function Messages({
           requestAutoScroll={requestAutoScroll}
           selectedExitPlanExecutionByItemKey={selectedExitPlanExecutionByItemKey}
           showFileLinkMenu={showFileLinkMenu}
+          streamMitigationProfile={activeStreamMitigation}
           streamActivityPhase={streamActivityPhase}
           threadId={threadId}
           toggleExpanded={toggleExpanded}

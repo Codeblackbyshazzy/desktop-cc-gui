@@ -82,6 +82,7 @@ import {
   mapNetworkErrorToUserMessage,
   normalizeAccessMode,
   pickLikelyGeminiSessionId,
+  primeThreadStreamLatencyForSend,
   resolveCollaborationModeIdFromPayload,
   resolveRecoverableCodexFirstPacketTimeout,
 } from "./threadMessagingHelpers";
@@ -719,6 +720,7 @@ export function useThreadMessaging({
       }
       markProcessing(threadId, true);
       safeMessageActivity();
+      primeThreadStreamLatencyForSend(workspace.id, threadId, effectiveResolvedEngine, modelForSend);
       onDebug?.({
         id: `${Date.now()}-client-turn-start`,
         timestamp: Date.now(),

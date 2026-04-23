@@ -1570,3 +1570,72 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 165: 修复 Claude Windows 实时输出卡顿
+
+**Date**: 2026-04-24
+**Task**: 修复 Claude Windows 实时输出卡顿
+**Branch**: `feature/v-0.4.8`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：
+修复 Claude Code 引擎在 Windows native 实时对话中首 delta 后正文可见输出停滞，避免直到 turn 完成才整段输出；保持 macOS 与非 Claude 引擎 baseline。
+
+主要改动：
+- 新增 Claude+Windows engine-level visible streaming profile，first delta 只 prime candidate profile，证据出现后才记录 mitigation-activated。
+- Markdown 增加 onRenderedValueChange，Messages -> MessagesTimeline -> MessagesRows 回传实际可见文本。
+- Claude Windows streaming 中间态使用 plain text live surface，完成后恢复 Markdown。
+- visible text growth 按 assistant itemId 隔离，visibleTextLength sanitize 为有限非负整数。
+- visible-stall timer 自动上报并在 turn completion/test reset 清理。
+- streaming 样式拆到 src/styles/messages.streaming.css，messages.part1.css 降到 2196 行，退出本次 near-threshold watch。
+- 更新 OpenSpec tasks 与 .trellis/spec/frontend/component-guidelines.md。
+
+涉及模块：
+- src/features/threads/utils/streamLatencyDiagnostics.ts
+- src/features/messages/components/Markdown.tsx
+- src/features/messages/components/Messages.tsx
+- src/features/messages/components/MessagesTimeline.tsx
+- src/features/messages/components/MessagesRows.tsx
+- src/styles/messages.css / messages.streaming.css
+- openspec/changes/fix-claude-windows-streaming-visibility-stall/tasks.md
+- .trellis/spec/frontend/component-guidelines.md
+
+验证结果：
+- targeted Vitest: 5 files / 36 tests passed.
+- npm run typecheck passed.
+- npm run lint passed.
+- npm run check:large-files:near-threshold passed; found=25; messages.part1.css removed from warning list.
+- npm run check:large-files:gate passed; found=0.
+- node --test scripts/check-heavy-test-noise.test.mjs passed; 5 tests.
+- npm run check:heavy-test-noise completed 350 test files; act warnings=0, stdout payload lines=0, stderr payload lines=0.
+- openspec validate fix-claude-windows-streaming-visibility-stall --type change --strict --no-interactive passed.
+- git diff --check passed.
+- Windows native manual verification remains pending and is not faked.
+
+后续事项：
+- 提交后在 Windows native Claude Code 环境验证首 delta 后正文是否持续增长、最终 Markdown 是否恢复、macOS/非 Claude 控制路径是否保持 baseline。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `58676abee55f6b570fb6a1822216b0e0cb49b061` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

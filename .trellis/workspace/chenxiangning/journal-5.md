@@ -648,3 +648,55 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 148: Recalibrate OpenSpec snapshot and strict validation
+
+**Date**: 2026-04-23
+**Task**: Recalibrate OpenSpec snapshot and strict validation
+**Branch**: `feature/v-0.4.8`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：整理 OpenSpec 仓库尾项，校准快照文档，清除最后一个 strict validation warning，并确认当前规范仓库处于可校验状态。
+
+主要改动：
+- 扩充 `openspec/specs/conversation-user-path-reference-cards/spec.md` 的 Purpose 描述，补足 strict 校验要求。
+- 校准 `openspec/README.md` 与 `openspec/project.md` 中的 OpenSpec 快照统计，修正 active/archive 数量与更新时间。
+- 确认 `add-codex-computer-use-plugin-bridge` 归档后的仓库状态与当前目录现实一致。
+
+涉及模块：
+- `openspec/specs/conversation-user-path-reference-cards/spec.md`
+- `openspec/README.md`
+- `openspec/project.md`
+
+验证结果：
+- `openspec validate conversation-user-path-reference-cards --strict` 通过。
+- `openspec validate --all --strict` 通过，结果为 171 passed, 0 failed。
+
+后续事项：
+- 当前 OpenSpec 活跃变更剩余 3 个：`add-codex-structured-launch-profile`、`claude-code-mode-progressive-rollout`、`project-memory-refactor`。
+- 如需继续整理，可在这 3 个 active change 中选择下一项推进或归档。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e9e98dae` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

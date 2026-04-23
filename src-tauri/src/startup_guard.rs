@@ -1,20 +1,22 @@
 #[cfg(any(target_os = "windows", test))]
 use serde::{Deserialize, Serialize};
 #[cfg(any(target_os = "windows", test))]
-use std::path::{Path, PathBuf};
-#[cfg(any(target_os = "windows", test))]
+use std::path::Path;
+#[cfg(target_os = "windows")]
+use std::path::PathBuf;
+#[cfg(target_os = "windows")]
 use std::sync::Mutex;
 
-#[cfg(any(target_os = "windows", test))]
+#[cfg(target_os = "windows")]
 use crate::app_paths;
 
-#[cfg(any(target_os = "windows", test))]
+#[cfg(target_os = "windows")]
 const STARTUP_GUARD_FILENAME: &str = "startup_guard.json";
 #[cfg(any(target_os = "windows", test))]
 const COMPAT_MODE_THRESHOLD: u32 = 1;
 #[cfg(any(target_os = "windows", test))]
 const GPU_FALLBACK_THRESHOLD: u32 = 2;
-#[cfg(any(target_os = "windows", test))]
+#[cfg(target_os = "windows")]
 static STARTUP_GUARD_STATE_LOCK: Mutex<()> = Mutex::new(());
 
 #[cfg(any(target_os = "windows", test))]
@@ -32,7 +34,7 @@ struct StartupGuardState {
     launch_in_progress: bool,
 }
 
-#[cfg(any(target_os = "windows", test))]
+#[cfg(target_os = "windows")]
 fn guard_file_path() -> Result<PathBuf, String> {
     Ok(app_paths::app_home_dir()?.join(STARTUP_GUARD_FILENAME))
 }

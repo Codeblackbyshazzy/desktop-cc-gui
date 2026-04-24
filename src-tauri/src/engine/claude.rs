@@ -50,8 +50,8 @@ use stream_helpers::extract_text_from_content;
 use stream_helpers::extract_tool_result_text;
 use stream_helpers::{
     extract_claude_tool_input, extract_claude_tool_name, extract_result_text, extract_string_field,
-    is_claude_stream_control_line, looks_like_claude_runtime_error, parse_claude_stream_json_line,
-    tool_input_signature,
+    is_claude_stream_control_line, looks_like_claude_runtime_error, merge_text_chunks,
+    parse_claude_stream_json_line, tool_input_signature,
 };
 
 #[derive(Debug, Clone)]
@@ -1425,10 +1425,25 @@ impl ClaudeSession {
                 *last = cumulative.to_string();
                 return delta;
             }
+            if last.starts_with(cumulative) {
+                return String::new();
+            }
             // Cumulative text doesn't extend the previous — emit full text
             *last = cumulative.to_string();
         }
         cumulative.to_string()
+    }
+
+    /// Keep the emitted-text tracker aligned when Claude streams raw deltas
+    /// before it later sends a cumulative assistant snapshot.
+    fn track_emitted_text_delta(&self, turn_id: &str, delta: &str) {
+        if delta.is_empty() {
+            return;
+        }
+        if let Ok(mut map) = self.last_emitted_text_by_turn.lock() {
+            let last = map.entry(turn_id.to_string()).or_default();
+            *last = merge_text_chunks(last, delta);
+        }
     }
 
     fn append_tool_input(&self, tool_id: &str, partial: &str) -> Option<Value> {

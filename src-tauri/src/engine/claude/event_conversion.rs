@@ -355,6 +355,7 @@ impl ClaudeSession {
                     extract_delta_text_from_event(event).or_else(|| extract_result_text(event))
                 {
                     if !text.is_empty() {
+                        self.track_emitted_text_delta(turn_id, &text);
                         return Some(EngineEvent::TextDelta {
                             workspace_id: self.workspace_id.clone(),
                             text,
@@ -685,6 +686,7 @@ impl ClaudeSession {
                         return Some(event);
                     }
                 }
+                self.track_emitted_text_delta(turn_id, text);
                 Some(EngineEvent::TextDelta {
                     workspace_id: self.workspace_id.clone(),
                     text: text.to_string(),

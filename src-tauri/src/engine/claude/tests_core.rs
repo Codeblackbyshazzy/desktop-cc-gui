@@ -221,6 +221,101 @@ fn convert_event_supports_assistant_message_delta_aliases() {
 }
 
 #[test]
+fn convert_event_tracks_stream_text_deltas_before_final_assistant_snapshot() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+
+    let first = json!({
+        "type": "stream_event",
+        "event": {
+            "type": "content_block_delta",
+            "delta": {
+                "type": "text_delta",
+                "text": "第一段"
+            }
+        }
+    });
+    let second = json!({
+        "type": "stream_event",
+        "event": {
+            "type": "content_block_delta",
+            "delta": {
+                "type": "text_delta",
+                "text": "第二段"
+            }
+        }
+    });
+
+    match session.convert_event("turn-a", &first) {
+        Some(EngineEvent::TextDelta { text, .. }) => assert_eq!(text, "第一段"),
+        other => panic!("expected first streamed delta, got {:?}", other),
+    }
+    match session.convert_event("turn-a", &second) {
+        Some(EngineEvent::TextDelta { text, .. }) => assert_eq!(text, "第二段"),
+        other => panic!("expected second streamed delta, got {:?}", other),
+    }
+
+    let assistant = json!({
+        "type": "assistant",
+        "message": {
+            "content": [
+                {"type": "text", "text": "第一段第二段"}
+            ]
+        }
+    });
+
+    assert!(session.convert_event("turn-a", &assistant).is_none());
+}
+
+#[test]
+fn convert_event_emits_only_increment_after_stream_text_deltas() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+
+    let first = json!({
+        "type": "stream_event",
+        "event": {
+            "type": "content_block_delta",
+            "delta": {
+                "type": "text_delta",
+                "text": "你好"
+            }
+        }
+    });
+    let second = json!({
+        "type": "stream_event",
+        "event": {
+            "type": "content_block_delta",
+            "delta": {
+                "type": "text_delta",
+                "text": "，世界"
+            }
+        }
+    });
+
+    match session.convert_event("turn-a", &first) {
+        Some(EngineEvent::TextDelta { text, .. }) => assert_eq!(text, "你好"),
+        other => panic!("expected first streamed delta, got {:?}", other),
+    }
+    match session.convert_event("turn-a", &second) {
+        Some(EngineEvent::TextDelta { text, .. }) => assert_eq!(text, "，世界"),
+        other => panic!("expected second streamed delta, got {:?}", other),
+    }
+
+    let assistant = json!({
+        "type": "assistant",
+        "message": {
+            "content": [
+                {"type": "text", "text": "你好，世界！"}
+            ]
+        }
+    });
+
+    match session.convert_event("turn-a", &assistant) {
+        Some(EngineEvent::TextDelta { text, .. }) => assert_eq!(text, "！"),
+        other => panic!("expected punctuation-only delta, got {:?}", other),
+    }
+}
+
+#[test]
 fn convert_event_maps_system_compacting_to_raw() {
     let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
     let event = json!({

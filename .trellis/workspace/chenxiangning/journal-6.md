@@ -148,3 +148,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 174: 归档已验证的 Claude 稳定性提案
+
+**Date**: 2026-04-24
+**Task**: 归档已验证的 Claude 稳定性提案
+**Branch**: `feature/v-0.4.8`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：将当前工作区全部 OpenSpec 归档与主 spec 同步改动做一次完整提交，并保持 active changes 只保留未完成提案。\n\n主要改动：\n- 归档 5 个已验证完成的 Claude 稳定性 change 到 openspec/changes/archive/2026-04-24-*\n- 合并共享 spec 的 requirement 到主 openspec/specs，补齐 conversation lifecycle、render surface、latency diagnostics 主规范\n- 新建 claude-code-realtime-stream-visibility、claude-repeat-turn-blanking-recovery、claude-session-sidebar-state-parity 三个 capability 主 spec\n- 保留 add-codex-structured-launch-profile、claude-code-mode-progressive-rollout、project-memory-refactor 为 in-progress，不误归档\n\n涉及模块：\n- openspec/changes/archive/**\n- openspec/specs/**\n\n验证结果：\n- openspec list --json 确认 active changes 仅剩 3 个 in-progress\n- git commit 已完成：5c91e83d docs(openspec): 归档已验证的 Claude 稳定性提案\n- 本次为规范归档与同步，不涉及运行时代码，未运行 lint/typecheck/test\n\n后续事项：\n- 如需把本次归档继续推送到远端，可直接执行 git push\n- 后续新的 Claude 稳定性 change 完成后，应继续按同样方式同步主 spec 后归档\n
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5c91e83d8311bf5b67d0de7c869e0a1a4314de68` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
